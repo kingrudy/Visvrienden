@@ -4,7 +4,7 @@ services:
     container_name: visvrienden
     restart: unless-stopped
     ports:
-      - "18305:18305"
+      - "8304:8304"
     volumes:
       - visvrienden-data:/data
 volumes:
