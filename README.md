@@ -6,7 +6,7 @@ Een multiplayer sportvis-spel voor vrienden, in de browser (three.js, Node-serve
 - Met Docker: `docker compose up -d --build`
 - Zonder Docker (Node 22): `node server.js`
 
-Open daarna http://localhost:8304 — maak een account, maak of join een kamer ("Dorpsvijver", "Vrienden-water") en deel de link met vrienden.
+Open daarna http://localhost:8304 (bij Docker Compose: voeg zelf `ports: ["8304:8304"]` toe als je lokaal wilt testen) — maak een account, maak of join een kamer ("Dorpsvijver", "Vrienden-water") en deel de link met vrienden.
 
 ## Spelen
 - **WASD / pijltjes**: lopen · **muis**: kijken en richten · **links klikken / spatie**: uitwerpen, aanslaan en inhalen
