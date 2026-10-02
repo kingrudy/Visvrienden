@@ -136,7 +136,7 @@ function ripple(x, z, big, y) { const f = fx.find(f => f.age > 2) || fx[0]; cons
 function addPlayer(info) {
   let E = G.players.get(info.id);
   if (!E) {
-    const isMe = info.id === G.id, h = M.makeHuman(info.look, RODS[info.rod]?.color);
+    const isMe = info.id === G.id, h = M.makeHuman(info.look, RODS[info.rod]?.color, String(info.name).toLowerCase() === 'toon' ? 'ironman' : null);
     E = { id: info.id, isMe, h, x: isMe ? me.x : S.SPAWN.x, z: isMe ? me.z : S.SPAWN.z, ry: 0, tx: 0, tz: 0, try: 0, mountN: 0, fs: 0, bx: 0, bz: 0, D: 0, pond: -1, speed: 0, veh: null, dogM: null, dogPos: null, bobber: M.makeBobber(), line: null, ripT: 0, first: true, bub: null, bubT: 0, info: {} };
     const lg = new THREE.BufferGeometry().setFromPoints(Array.from({ length: 16 }, () => new THREE.Vector3())); E.line = new THREE.Line(lg, new THREE.LineBasicMaterial({ color: '#f4f4f4', transparent: true, opacity: 0.85 }));
     E.line.frustumCulled = false; E.bobber.visible = E.line.visible = false;

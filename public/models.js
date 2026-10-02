@@ -73,11 +73,43 @@ const LOOKS = [
   { shirt: '#4a8a4a', pants: '#6a5a3a', hat: 'straw', hatC: '#e0c878', skin: '#a8714f' },
   { shirt: '#e8962a', pants: '#2a3a4a', hat: 'hood', hatC: '#f2d23a', skin: '#f6d7bd' },
 ];
-export function makeHuman(look = 0, rodColor = '#c8a458') {
-  const L = LOOKS[look % 4], root = new THREE.Group(), tpl = ANGLERS[look % 4]; let body, legL, legR, armL, armR, head;
+const IRON_RED = '#b5121b', IRON_GOLD = '#f2b92c';
+// Iron Man-pak voor een Blender-visser: alles rood, laarzen/handen/helm goud, arc reactor op de borst
+function ironmanHuman(t) {
+  const glow = new THREE.MeshBasicMaterial({ color: '#8ff0ff' });
+  const red = mat(IRON_RED, { flatShading: false }), gold = mat(IRON_GOLD, { flatShading: false });
+  const gn = n => t.getObjectByName(n);
+  for (const pv of ['legL', 'legR', 'armL', 'armR', 'body', 'head']) {
+    const node = gn(pv); if (!node) continue;
+    for (const grp of node.children) for (const m of grp.children.length ? grp.children : []) {
+      if (!m.isMesh) continue;
+      m.geometry.computeBoundingBox(); const b = m.geometry.boundingBox;
+      if (pv === 'head') { m.visible = false; continue; }                                   // muts, haar en gezicht verdwijnen onder de helm
+      if (pv.startsWith('leg')) m.material = b.max.y < -0.44 ? gold : red;                 // laarzen goud
+      else if (pv.startsWith('arm')) { if (b.min.y < -0.7) m.visible = false; else m.material = b.min.y < -0.55 ? gold : red; }   // handen goud, emmer weg
+      else m.material = red;
+    }
+  }
+  const body = gn('body'), head = gn('head'); if (!body || !head) return;
+  // helm: gouden gezichtsplaat met rode kruin, gloeiende ogen
+  const add = (p, geo, m, sx, sy, sz, x, y, z) => { const o = new THREE.Mesh(geo, m); o.scale.set(sx, sy, sz); o.position.set(x, y, z); p.add(o); return o; };
+  add(head, SPH, gold, 0.52, 0.5, 0.49, 0, 0, 0); add(head, SPH, red, 0.54, 0.26, 0.5, 0, 0.14, -0.005);
+  add(head, BOX, gold, 0.1, 0.34, 0.1, 0, 0.2, 0.0).scale.set(0.06, 0.12, 0.3);                  // kam
+  for (const sx of [-1, 1]) { add(head, BOX, glow, 0.13, 0.05, 0.03, sx * 0.1, 0.04, 0.245).rotation.z = sx * 0.12; add(head, SPH, red, 0.09, 0.14, 0.08, sx * 0.25, -0.02, 0); }
+  add(head, BOX, new THREE.MeshLambertMaterial({ color: '#4a3a1a' }), 0.12, 0.018, 0.03, 0, -0.13, 0.245);
+  // borst: gouden plaat met arc reactor
+  const rx = new THREE.Group(); rx.position.set(0, 1.3, 0.26); body.add(rx);
+  add(rx, SPH, gold, 0.34, 0.3, 0.1, 0, 0, -0.02); add(rx, TORUS, gold, 0.17, 0.17, 0.17, 0, 0, 0.03);
+  add(rx, SPH, glow, 0.1, 0.1, 0.05, 0, 0, 0.04); add(rx, SPH, new THREE.MeshBasicMaterial({ color: '#6fe4ff', transparent: true, opacity: 0.3, depthWrite: false }), 0.22, 0.22, 0.09, 0, 0, 0.04);
+  // repulsors: gloeiende handpalmen
+  for (const n of ['armL', 'armR']) { const a = gn(n); if (a) add(a, SPH, glow, 0.08, 0.08, 0.04, 0, -0.64, 0.11); }
+}
+export function makeHuman(look = 0, rodColor = '#c8a458', special = null) {
+  const L = special === 'ironman' ? { ...LOOKS[look % 4], shirt: IRON_RED, pants: IRON_RED, skin: IRON_GOLD, hat: 'cap', hatC: IRON_GOLD } : LOOKS[look % 4], root = new THREE.Group(), tpl = ANGLERS[look % 4]; let body, legL, legR, armL, armR, head;
   if (tpl) {      // Blender-model (public/models/anglerN.glb)
     const t = tpl.clone(true); root.add(t); const g = n => t.getObjectByName(n);
     body = g('body'); legL = g('legL'); legR = g('legR'); armL = g('armL'); armR = g('armR'); head = g('head');
+    if (special === 'ironman') ironmanHuman(t);
   } else {
   body = new THREE.Group(); root.add(body);
   legL = new THREE.Group(); legR = new THREE.Group(); legL.position.set(-0.12, 0.85, 0); legR.position.set(0.12, 0.85, 0); body.add(legL, legR);
