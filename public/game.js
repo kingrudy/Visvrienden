@@ -278,11 +278,14 @@ function onCatch(m) {
   <div class="note">${m.rec ? '<span class="rec">★ Nieuw record! </span>' : ''}Waarde ca. 🪙 ${S.fishValue(sp, m.fish.w)} · +${m.xp} xp</div>${m.heron ? '<div style="color:#ff8a7a;font-weight:800;margin-top:6px">🐦 Een reiger loert! Kies snel!</div>' : ''}
   <div class="row"><button class="pri" id="ccKeep">Behouden (F)</button><button id="ccRel">Terugzetten (G)</button></div><div class="row" style="margin-top:6px"><button id="ccPhoto">📸 Foto</button></div><div class="timer"><i id="ccTimer"></i></div>`;
   card.classList.remove('hidden');
+  if (!isTouch) try { document.exitPointerLock(); } catch { }   // muis vrij om op de knoppen te klikken
   $('ccKeep').onclick = () => decideCatch(true); $('ccRel').onclick = () => decideCatch(false); $('ccPhoto').onclick = () => takePhoto(G.catchCard);
   if (sp.leg) { A.sfx.legend(); bigMsg(`✨ ${sp.name}!`); } else A.sfx.catch(sp.rar);
   G.shake = 0;
 }
-function decideCatch(keep) { const c = G.catchCard; if (!c) return; send({ t: keep ? 'keep' : 'release', fid: c.fid }); G.catchCard = null; $('catchCard').classList.add('hidden'); }
+function decideCatch(keep) { const c = G.catchCard; if (!c) return; send({ t: keep ? 'keep' : 'release', fid: c.fid }); G.catchCard = null; $('catchCard').classList.add('hidden');
+  if (!isTouch && !G.panel && !G.photo) try { cv.requestPointerLock?.(); } catch { }   // muis weer vastzetten voor het vissen
+}
 function onLost(m) { G.fight = null; $('fightUI').classList.add('hidden'); setStatus(m.msg, '', 3500); if (m.snap) { A.sfx.snap(); G.shake = 0.3; } else A.sfx.warn(); }
 function updateFightUI() {
   const f = G.fight; if (!f) return; const sp = SPECIES[f.fid];
