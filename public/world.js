@@ -196,7 +196,7 @@ export class World {
 
   /* ---------------- bomen en rotsen */
   buildForest() {
-    const step = this.q === 0 ? 14 : this.q === 1 ? 10 : 8, W = S.WORLD, buckets = {}, add = (t, x, z, s, r) => (buckets[t] || (buckets[t] = [])).push([x, S.heightAt(x, z), z, s, r]);
+    const step = this.q === 0 ? 14 : this.q === 1 ? 10 : 8, W = S.WORLD, buckets = {}, add = (t, x, z, s, r) => { if (S.houseNear(x, z, 5)) return; (buckets[t] || (buckets[t] = [])).push([x, S.heightAt(x, z), z, s, r]); };
     const avoid = [...S.SHOPS, ...S.CAMPFIRES, { x: S.SPAWN.x, z: S.SPAWN.z }, { x: 10, z: 22 }, ...S.GATES, ...S.JETTIES].map(o => [o.x, o.z]);
     const mixes = {
       meadow: [['oak', 0.45], ['birch', 0.3], ['bush', 0.6], ['rock', 0.1]], forest: [['pine', 0.6], ['oak', 0.35], ['bush', 0.3]], swamp: [['dead', 0.5], ['oak', 0.25], ['bush', 0.4]],

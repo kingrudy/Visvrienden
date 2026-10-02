@@ -23,6 +23,7 @@ Open daarna http://localhost:8304 (bij Docker Compose: voeg zelf `ports: ["8304:
 - Dagelijkse opdrachten, prestaties, talenten, visboek, ranglijsten, fotomodus, sonar en minikaart.
 
 - Vis van de week (wisselt elke maandag): bijt 2,5× vaker en verkoopt voor 1,5×. Aas en weer werken samen (bijv. wormen bij regen).
+- Elk account heeft een eigen huis in het dorp (bord met je naam, tot 42 huizen) met een aquarium waarin je gevangen soorten in het klein zwemmen en een hondenmand (de hond slaapt daar als je offline bent). Menu > Naar huis brengt je erheen; E bij het aquarium toont de collectie.
 - Camera schuift voor bomen langs; je wereldkaart met voortgang per vijver staat in de lobby.
 
 Data staat in `db.json` (map `DATA_DIR`). Elke dag wordt een back-up gemaakt in `DATA_DIR/backups/` (laatste 7 blijven bewaard).

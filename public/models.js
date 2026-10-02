@@ -256,3 +256,71 @@ export function makeBoard() {
   const s = signMesh(['Prikbord', 'wedstrijden · geruchten', 'ranglijst'], 2.6, 1.5); s.position.set(0, 1.9, 0.12); g.add(s); box(g, '#8a6a3a', 2.8, 1.7, 0.1, 0, 1.9, 0);
   return g;
 }
+
+/* ------------------------------------------------------------------ huis met aquarium en hondenmand */
+function plaque(text) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128; const x = c.getContext('2d');
+  x.fillStyle = '#5a3a1a'; x.fillRect(0, 0, 512, 128); x.fillStyle = '#8a6a3a'; x.fillRect(8, 8, 496, 112);
+  let fs = 60; x.font = `bold ${fs}px system-ui,sans-serif`; while (x.measureText(text).width > 460 && fs > 20) { fs -= 2; x.font = `bold ${fs}px system-ui,sans-serif`; }
+  x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#2a1a08'; x.fillText(text, 256, 68);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.9), new THREE.MeshBasicMaterial({ map: t }));
+}
+const HOUSE_COLS = ['#d9c7a3', '#c98b7a', '#8fb0c9', '#b9c98f', '#d9b4c9', '#c9b48f', '#9fc9b8'];
+export function makeHouse(slot = 0) {
+  const g = new THREE.Group(), wall = HOUSE_COLS[slot % HOUSE_COLS.length], W = 8, D = 7, WH = 3, hw = W / 2, hd = D / 2;
+  box(g, '#8a8a84', W + 0.7, 0.5, D + 0.7, 0, -0.27, 0);                     // fundering
+  box(g, '#9a7a52', W - 0.2, 0.06, D - 0.2, 0, -0.01, 0);                    // vloer (bovenkant ~ y 0.02)
+  box(g, '#a04a4a', 3.4, 0.03, 2.2, 0, 0.035, -0.6); box(g, '#d8c8a0', 3.0, 0.035, 1.8, 0, 0.04, -0.6);   // kleed
+  box(g, wall, W, WH, 0.3, 0, WH / 2, hd - 0.15);                            // achterwand
+  for (const s of [-1, 1]) box(g, wall, 0.3, WH, D, s * (hw - 0.15), WH / 2, 0);   // zijwanden
+  for (const s of [-1, 1]) box(g, wall, 2.4, WH, 0.3, s * 2.8, WH / 2, -hd + 0.15); // voorwand links/rechts
+  box(g, wall, 3.2, WH - 2.4, 0.3, 0, 2.4 + (WH - 2.4) / 2, -hd + 0.15);    // latei boven de deur
+  box(g, '#6a4a2a', 3.4, 0.14, 0.4, 0, 2.4, -hd + 0.15);                      // deurbalk
+  for (const [y, w] of [[3.25, 7.7], [3.75, 5.9], [4.25, 4.1], [4.7, 2.3]]) { box(g, wall, w, 0.5, 0.3, 0, y, -hd + 0.15); box(g, wall, w, 0.5, 0.3, 0, y, hd - 0.15); }   // geveltoppen
+  const a = Math.atan2(1.7, 4.4), L = Math.hypot(4.4, 1.7) + 0.5;
+  for (const s of [-1, 1]) { const r = box(g, '#9a4a3a', L, 0.16, D + 0.8, s * 2.25, 3.9, 0); r.rotation.z = -s * a; }
+  box(g, '#7a3a2c', 0.4, 0.18, D + 0.8, 0, 4.78, 0);
+  box(g, '#7a7a76', 0.7, 1.4, 0.7, 2.4, 4.7, 1.6);                           // schoorsteen
+  for (const s of [-1, 1]) { box(g, '#ffe9a8', 0.1, 1.0, 1.1, s * (hw - 0.1), 1.6, 0.6, { emissive: '#ffcc66', emissiveIntensity: 0.35 }); box(g, '#5a3a1a', 0.14, 0.1, 1.3, s * (hw - 0.1), 1.05, 0.6); }   // ramen
+  box(g, '#5a3a1a', 3.6, 0.12, 0.7, 0, 0.05, -hd - 0.45);                     // stoep
+  // aquarium tegen de achterwand
+  const aq = new THREE.Group(); aq.position.set(0, 0, hd - 0.85); g.add(aq);
+  box(aq, '#6a4a2a', 3.4, 0.85, 0.95, 0, 0.43, 0); box(aq, '#8a6a3a', 3.5, 0.06, 1.05, 0, 0.88, 0);
+  const tank = new THREE.Group(); tank.position.set(0, 1.5, 0); aq.add(tank);
+  box(tank, '#3a9ac8', 3.1, 1.15, 0.8, 0, 0, 0, { transparent: true, opacity: 0.38, depthWrite: false });
+  box(tank, '#e8d8a0', 3.05, 0.14, 0.78, 0, -0.5, 0);                         // zand
+  for (const [x, c] of [[-1.2, '#2f8a4a'], [-0.5, '#3aa05a'], [0.9, '#2f8a4a'], [1.3, '#3aa05a']]) cone(tank, c, 0.12, 0.7, 0.1, x, -0.2, (x * 7) % 0.3);
+  sph(tank, '#8a8a8a', 0.4, 0.28, 0.3, -0.1, -0.4, 0.2); sph(tank, '#7a7a8a', 0.26, 0.2, 0.22, 0.6, -0.42, -0.1);
+  for (const [x, z] of [[-1.58, -0.42], [1.58, -0.42], [-1.58, 0.42], [1.58, 0.42]]) box(aq, '#2a2a30', 0.06, 1.2, 0.06, x, 1.5, z);
+  box(aq, '#2a2a30', 3.2, 0.06, 0.9, 0, 2.12, 0); box(aq, '#fff6d8', 2.8, 0.05, 0.5, 0, 2.08, 0, { emissive: '#fff2c0', emissiveIntensity: 0.9 });
+  const fishBox = new THREE.Group(); fishBox.position.copy(tank.position); aq.add(fishBox);
+  // hondenmand in de hoek
+  const basket = new THREE.Group(); basket.position.set(-hw + 1.3, 0, hd - 1.3); g.add(basket);
+  cyl(basket, '#b8864a', 0.85, 0.3, 0.85, 0, 0.17, 0); cyl(basket, '#8a6030', 0.7, 0.32, 0.7, 0, 0.19, 0, { }); cyl(basket, '#c85a5a', 0.66, 0.12, 0.66, 0, 0.22, 0);
+  const bdog = makeDog(0); bdog.scale.setScalar(0.85); bdog.position.set(0, 0.2, 0); bdog.userData.update(0, 0); bdog.rotation.y = 2.2; basket.add(bdog); bdog.visible = false;
+  box(g, '#6a4a2a', 0.9, 0.5, 0.6, hw - 1.1, 0.25, hd - 0.8); box(g, '#d8d0b8', 0.5, 0.25, 0.4, hw - 1.1, 0.62, hd - 0.8);   // kastje met kist
+  const H = { root: g, fishBox, bdog, basket, aq, plaque: null, fish: [], sig: '', t: Math.random() * 9 };
+  H.setOwner = name => { if (H.plaque) g.remove(H.plaque); H.plaque = plaque(`Huis van ${name}`); H.plaque.position.set(0, 3.55, -hd - 0.02); H.plaque.rotation.y = Math.PI; g.add(H.plaque); };
+  // vissen in het aquarium: soorten die de eigenaar ooit ving, klein formaat
+  H.setFish = species => {
+    const sig = species.map(s => s.id).join(',');
+    if (sig === H.sig) return; H.sig = sig;
+    for (const f of H.fish) fishBox.remove(f.m); H.fish = [];
+    species.slice(0, 22).forEach((sp, i) => {
+      const m = makeFish(sp, null), k = 0.19 + Math.min(0.06, sp.w[1] * 0.001) + (sp.shape === 'paling' ? -0.02 : 0);
+      m.scale.setScalar(k); fishBox.add(m);
+      H.fish.push({ m, ph: i * 1.7 + Math.random(), sx: 0.6 + (i % 5) * 0.12, y: -0.25 + ((i * 37) % 10) / 10 * 0.75, z: -0.22 + ((i * 17) % 10) / 10 * 0.44, sp: 0.18 + (i % 7) * 0.05 });
+    });
+  };
+  H.update = dt => {
+    H.t += dt;
+    for (const f of H.fish) {
+      const ph = f.ph + H.t * f.sp, x = Math.sin(ph) * 1.3 * f.sx, dx = Math.cos(ph) * f.sp;
+      f.m.position.set(x, f.y + Math.sin(ph * 2.3) * 0.07, f.z + Math.sin(ph * 1.3) * 0.08);
+      f.m.rotation.y = dx > 0 ? 0 : Math.PI;
+      if (f.m.userData.tail) f.m.userData.tail.rotation.y = Math.sin(H.t * 8 + f.ph * 3) * 0.5;
+    }
+  };
+  return H;
+}

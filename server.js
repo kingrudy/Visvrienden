@@ -7,7 +7,8 @@ import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { Room, ensureSave, applyTalent, resetTalents, ensureDaily } from './room.js';
+import { Room, ensureSave, applyTalent, resetTalents, ensureDaily, hooks, houseInfo } from './room.js';
+import { HOUSE_SLOTS } from './public/shared.js';
 
 const scrypt = promisify(crypto.scrypt);
 const __dir = path.dirname(fileURLToPath(import.meta.url));
@@ -48,6 +49,14 @@ function backup() {
 backup(); setInterval(() => { flush(); backup(); }, 3600000).unref();
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { flush(); process.exit(0); });
 
+/* ------------------------------------------------------------------ huizen: elk account krijgt een vaste plek in het dorp */
+function assignHouse(u) {
+  const s = u.save; if (!s || (Number.isInteger(s.house) && s.house >= 0)) return;
+  const used = new Set(Object.values(db.users).map(x => x.save?.house).filter(Number.isInteger));
+  for (let i = 0; i < HOUSE_SLOTS.length; i++) if (!used.has(i)) { s.house = i; markDirty(); return; }
+}
+hooks.houses = () => Object.values(db.users).filter(u => u.save && u.save.house >= 0).map(u => houseInfo(u.save, u.name));
+
 /* ------------------------------------------------------------------ accounts */
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const USER_RE = /^[A-Za-z0-9_-]{3,16}$/;
@@ -76,7 +85,7 @@ async function register(name, pw) {
   const salt = crypto.randomBytes(16).toString('hex');
   const u = { name, salt, hash: await hashPw(pw, salt), created: Date.now(), save: {} };
   if (db.users[key]) return { err: 'Die gebruikersnaam is al in gebruik.' };
-  db.users[key] = u; ensureSave(u);
+  db.users[key] = u; ensureSave(u); assignHouse(u);
   return { token: newSession(key), name };
 }
 async function login(name, pw) {
@@ -247,7 +256,7 @@ class Conn {
       if (!u) return this.send({ t: 'authfail' });
       const key = u.name.toLowerCase(), old = byUser.get(key);
       if (old && old !== this) { old.send({ t: 'kicked' }); old.kill(); }
-      this.user = u; byUser.set(key, this); ensureSave(u);
+      this.user = u; byUser.set(key, this); ensureSave(u); assignHouse(u);
       if (m.build !== BUILD) {               // oude spelcode in de browser: niet laten spelen, wel uitleggen
         this.outdated = true;
         this.send({ t: 'outdated', build: BUILD });

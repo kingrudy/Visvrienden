@@ -86,8 +86,16 @@ export function ensureSave(u) {
   if (!s.buffs || typeof s.buffs !== 'object') s.buffs = {};
   s.trophies = Math.max(0, s.trophies | 0);
   if (!Number.isInteger(s.look) || s.look < 0 || s.look > 3) { let h = 0; for (const ch of String(u.name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; s.look = h % 4; }
+  if (!Number.isInteger(s.house)) s.house = -1;
   ensureDaily(u);
   return s;
+}
+
+/* ------------------------------------------------------------------ huizen */
+export const hooks = { houses: () => [] };         // server.js vult dit met alle huizen van alle accounts
+export function houseInfo(save, name) {
+  const sp = Object.entries(save.book || {}).filter(([id]) => SP[id]).sort((a, b) => SP[b[0]].rar - SP[a[0]].rar || a[0].localeCompare(b[0])).map(([id, b]) => [id, b.n, b.best]);
+  return { s: save.house, n: name, d: save.dog?.name || '', sp };
 }
 
 /* ------------------------------------------------------------------ kans dat een vis hapt */
@@ -136,7 +144,7 @@ export class Room {
       dirty: true, dirtyAt: 0, dogT: rnd(60, CFG.dogDigEvery), hintT: 0, tpAt: 0, chatAt: 0 };
     P.lastOk = { x: P.x, z: P.z };
     this.players.set(P.id, P); this.emptySince = null;
-    conn.send({ t: 'joined', id: P.id, room: this.summary, now, save: this.safeSave(P), weather: this.weather, merchant: this.merchantInfo(), players: [...this.players.values()].map(q => this.pinfo(q)), contest: this.contestInfo(), weekend: isWeekend(), featured: S.featuredSpecies().id });
+    conn.send({ t: 'joined', id: P.id, room: this.summary, now, save: this.safeSave(P), weather: this.weather, merchant: this.merchantInfo(), players: [...this.players.values()].map(q => this.pinfo(q)), contest: this.contestInfo(), weekend: isWeekend(), featured: S.featuredSpecies().id, houses: hooks.houses() });
     this.broadcast({ t: 'pinfo', p: this.pinfo(P) }, P);
     this.feed(`${P.name} is komen vissen.`, 'info', P);
     return P;
@@ -334,13 +342,14 @@ export class Room {
     if (sp.leg) this.legCd[sp.id] = Date.now() + CFG.legendRespawn * 1000;
     P.fs = 0; P.fight = null; P.chase = null; P.reel = false;
     const fish = { sp: sp.id, w: f.w, pond: sp.pond, t: Date.now() }; P.lastCatch = { sp: sp.id, w: f.w };
-    const rec = !s.book[sp.id] || s.book[sp.id].best < f.w;
+    const rec = !s.book[sp.id] || s.book[sp.id].best < f.w, newSp = !s.book[sp.id];
     const B = s.book[sp.id] || (s.book[sp.id] = { n: 0, best: 0, first: Date.now() });
     B.n++; if (f.w > B.best) B.best = f.w;
     const st = s.stats; st.catches++; st.totalKg = r2(st.totalKg + f.w);
     if (f.w > st.best) { st.best = f.w; st.bestSp = sp.id; }
     if (sp.rar === 2) st.rareCatches++; if (sp.rar >= 3) { st.rareCatches++; st.epicCatches++; } if (sp.leg) st.legCatches++;
     if (tc === 'nacht') st.nightCatches++; if (this.weather === 'storm') st.stormCatches++;
+    if (newSp && s.house >= 0) this.broadcast({ t: 'house', h: houseInfo(s, P.name) });
     const ps = st.pond[sp.pond] || (st.pond[sp.pond] = { n: 0, sp: {} }); ps.n++; ps.sp[sp.id] = 1;
     // beloning
     const xp = Math.round((12 + Math.min(60, f.w * 3)) * (0.8 + 0.45 * sp.rar) * (sp.leg ? 3 : 1));
@@ -437,6 +446,7 @@ export class Room {
       case 'cook': return this.cook(P, m);
       case 'mount': return this.setMount(P, String(m.m));
       case 'say': return this.say(P, m);
+      case 'home': { const h = S.HOUSE_SLOTS[P.save.house]; if (!h) return this.toast(P, 'Je hebt nog geen huis.', 'warn'); if (P.fs || P.mount !== 'walk') return this.toast(P, 'Haal eerst je lijn binnen en stap af.', 'warn'); if (P.fight) return; return this.tp(P, h.x, h.z - S.HOUSE_D / 2 - 2.2, 'Je staat voor je huis.'); }
       case 'emote': { const e = ['wave', 'laugh', 'thumb', 'fish'].indexOf(m.k); if (e < 0 || Date.now() - (P.emoteAt || 0) < 1500) return; P.emoteAt = Date.now(); const lc = m.k === 'fish' ? P.lastCatch : null; this.broadcast({ t: 'emote', id: P.id, k: m.k, sp: lc ? lc.sp : '', w: lc ? lc.w : 0 }); return; }
       case 'offer': return this.offer(P, m);
       case 'offerReply': return this.offerReply(P, m);
@@ -453,6 +463,7 @@ export class Room {
     if (m.unlock) { s.unlocked = S.ZONE_PONDS.map(p => p.id); s.disc = [6, 7]; }
     if (m.coins) s.coins += m.coins | 0;
     if (m.xp) this.addXp(P, m.xp | 0);
+    if (m.book) { for (const sp of S.SPECIES.slice(0, m.book | 0)) s.book[sp.id] = s.book[sp.id] || { n: 2, best: sp.w[1] * 0.6, first: Date.now() }; s.dog = s.dog || { name: 'Bobbel' }; this.broadcast({ t: 'house', h: houseInfo(s, P.name) }); this.dirty(P); }
     if (m.give) { for (const b of BAITS) s.baits[b.id] = 60; s.mounts = { bike: true, scooter: true, boat: true }; s.dog = s.dog || { name: 'Bobbel' }; s.rods.owned = RODS.map(r => r.id); this.broadcast({ t: 'pinfo', p: this.pinfo(P) }); }
     if (m.rod != null) { s.rods.active = m.rod | 0; this.broadcast({ t: 'pinfo', p: this.pinfo(P) }); }
     if (m.weather) { this.weather = m.weather; this.weatherUntil = 9999; this.broadcast({ t: 'wx', w: this.weather }); }
@@ -537,7 +548,7 @@ export class Room {
       const mt = MOUNTS[id]; if (!mt || s.mounts[id]) return; if (!pay(Math.round(mt.price * disc))) return; s.mounts[id] = true; this.toast(P, `${mt.name} gekocht!`, 'good');
     } else if (kind === 'dog') {
       if (!this.nearShop(P, ['main'])) return this.toast(P, 'Een hond adopteer je bij de Hengelwinkel.', 'warn');
-      if (s.dog) return; if (!pay(Math.round(S.DOG_PRICE * disc))) return; s.dog = { name: pick(DOG_NAMES) }; this.toast(P, `Je hebt ${s.dog.name} geadopteerd! Hij graaft wormen op en jaagt reigers weg.`, 'good'); this.broadcast({ t: 'pinfo', p: this.pinfo(P) });
+      if (s.dog) return; if (!pay(Math.round(S.DOG_PRICE * disc))) return; s.dog = { name: pick(DOG_NAMES) }; if (s.house >= 0) this.broadcast({ t: 'house', h: houseInfo(s, P.name) }); this.toast(P, `Je hebt ${s.dog.name} geadopteerd! Hij graaft wormen op en jaagt reigers weg.`, 'good'); this.broadcast({ t: 'pinfo', p: this.pinfo(P) });
     } else if (kind === 'upg') {
       if (!this.nearShop(P, ['smith'])) return this.toast(P, 'Upgrades doet Hengelsmid Marga.', 'warn');
       const U = UPGRADES[id]; if (!U || s.upg[id] >= U.max) return; const c = Math.round(S.upgradeCost(id, s.upg[id]) * disc);

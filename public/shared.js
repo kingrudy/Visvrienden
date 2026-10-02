@@ -46,7 +46,42 @@ export const shapeAt = (p, dx, dz) => { const th = Math.atan2(dz, dx); return 1 
 const entryAngle = p => { if (!p.req) return Math.PI / 2; const q = PONDS[p.req.from]; return Math.atan2(q.z - p.z, q.x - p.x); };
 for (const p of PONDS) p.entry = p.secret ? Math.atan2(SPAWN.z - p.z, SPAWN.x - p.x) : entryAngle(p);
 
+/* ------------------------------------------------------------------ huizen (elke speler heeft een huisje in het dorp) */
+export const HOUSE_W = 8, HOUSE_D = 7;           // plattegrond (x breed, z diep); voorkant = -z, kijkt naar de dorpsvijver
+export const HOUSE_SLOTS = (() => {
+  const a = [];
+  for (let r = 0; r < 2; r++) for (let c = -10; c <= 10; c++) a.push({ x: c * 14, z: 56 + r * 24, col: c, row: r });
+  a.sort((p, q) => Math.hypot(p.x, p.z - 66) - Math.hypot(q.x, q.z - 66) || p.x - q.x);
+  a.forEach((h, i) => { h.i = i; h.fl = 0; });
+  return a;
+})();
+const HOUSE_BY_CELL = new Map(HOUSE_SLOTS.map(h => [h.col + ',' + h.row, h]));
+export function houseCell(x, z) {                // dichtstbijzijnde huisvak (of null)
+  const col = Math.round(x / 14), row = Math.round((z - 56) / 24);
+  return HOUSE_BY_CELL.get(col + ',' + row) || null;
+}
+export function houseNear(x, z, m = 4) { const h = houseCell(x, z); return !!h && Math.abs(x - h.x) < HOUSE_W / 2 + m && Math.abs(z - h.z) < HOUSE_D / 2 + m; }
+// wanden: [x0,z0,x1,z1] relatief aan het huis, met een open deuropening (3,2 m) in de voorwand
+const HW = HOUSE_W / 2, HD = HOUSE_D / 2;
+const WALLS = [[-HW, HD - 0.3, HW, HD], [-HW, -HD, -HW + 0.3, HD], [HW - 0.3, -HD, HW, HD], [-HW, -HD, -1.6, -HD + 0.3], [1.6, -HD, HW, -HD + 0.3]];
+export function inHouseWall(x, z) {
+  const h = houseCell(x, z); if (!h) return false;
+  const lx = x - h.x, lz = z - h.z; if (Math.abs(lx) > HW + 0.4 || Math.abs(lz) > HD + 0.4) return false;
+  for (const [a, b, c, d] of WALLS) if (lx > a - 0.35 && lx < c + 0.35 && lz > b - 0.35 && lz < d + 0.35) return true;
+  return false;
+}
+function houseBlend(x, z) {                      // [gewicht, hoogte] van het vlakke terrein onder een huis
+  const h = houseCell(x, z); if (!h) return null;
+  const dx = Math.max(0, Math.abs(x - h.x) - HW - 1.2), dz = Math.max(0, Math.abs(z - h.z) - HD - 1.2), d = Math.hypot(dx, dz);
+  if (d > 6) return null;
+  if (!h.fl) h.fl = rawHeight(h.x, h.z) + 0.02;
+  return [1 - sm(0, 6, d), h.fl];
+}
 export function heightAt(x, z) {
+  const hb = houseBlend(x, z), h = rawHeight(x, z);
+  return hb ? h + (hb[1] - h) * hb[0] : h;
+}
+function rawHeight(x, z) {
   let h = (fbm(x * 0.006, z * 0.006, 1) - 0.5) * 14 + (fbm(x * 0.02, z * 0.02, 2) - 0.5) * 3;
   for (const p of PONDS) {
     const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
@@ -118,6 +153,7 @@ export function groundY(x, z) { const j = onJetty(x, z); if (j) return PONDS[j.p
 export function walkable(x, z, boat = false) {
   const w = pondWater(x, z);
   if (boat) return w >= 0 && !onJetty(x, z);
+  if (inHouseWall(x, z)) return false;
   return w < 0 || !!onJetty(x, z);
 }
 export function nearestPond(x, z) { let b = 0, bd = 1e9; for (const p of PONDS) { const d = Math.hypot(x - p.x, z - p.z) - p.r; if (d < bd) { bd = d; b = p.id; } } return b; }

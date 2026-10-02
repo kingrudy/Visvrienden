@@ -17,7 +17,7 @@ const MOUNT_N = ['walk', 'bike', 'scooter', 'boat'];
 /* ------------------------------------------------------------------ toestand */
 const G = {
   ws: null, token: store.get('token', null), name: '', save: null, id: 0, inGame: false, rooms: [], panel: null,
-  players: new Map(), fish: new Map(), herons: [], ducks: [], timeOff: 0, weather: 'clear', merchant: null, contest: null, weekend: false,
+  players: new Map(), houses: new Map(), fish: new Map(), herons: [], ducks: [], timeOff: 0, weather: 'clear', merchant: null, contest: null, weekend: false,
   settings: { q: store.get('q', isTouch ? 0 : 1), vol: store.get('vol', 60), sens: store.get('sens', 100) },
   keys: new Set(), actHeld: false, reelSent: false, lastPosSent: 0, lastSentX: 1e9, lastSentZ: 1e9,
   fight: null, catchCard: null, interact: null, photo: false, chatOpen: false, offer: null, aim: null, statusUntil: 0,
@@ -61,6 +61,7 @@ function onMsg(m) {
     case 'pinfo': addPlayer(m.p); break;
     case 'pgone': removePlayer(m.id); break;
     case 'ev': onEvent(m); break;
+    case 'house': setHouse(m.h); break;
     case 'emote': { const E = G.players.get(m.id); if (!E) break; const T = { wave: '👋', laugh: '😄', thumb: '👍' }; const txt = m.k === 'fish' ? (m.sp && SP[m.sp] ? `🐟 ${SP[m.sp].name} ${S.fmtKg(m.w)}` : '🐟 Nog niks gevangen…') : T[m.k]; if (txt) chatBubble(m.id, txt); break; }
     case 'toast': toast(m.msg, m.kind); if (m.kind === 'good') A.sfx.coin(); break;
     case 'feed': feed(m.msg, m.kind); break;
@@ -269,6 +270,30 @@ function actUp() { G.actHeld = false; }
 function cancelLine() { if (me.fs) send({ t: 'cancel' }); }
 function syncReel() { const want = me.fs === 3 && (G.actHeld || G.keys.has('Space')); if (want !== G.reelSent) { G.reelSent = want; send({ t: 'reel', on: want }); } }
 
+/* ------------------------------------------------------------------ huizen */
+function setHouse(info) {
+  const slot = S.HOUSE_SLOTS[info.s]; if (!slot) return;
+  let h = G.houses.get(info.s);
+  if (!h) { const H = M.makeHouse(info.s); H.root.position.set(slot.x, S.heightAt(slot.x, slot.z), slot.z); scene.add(H.root); h = { H, info }; G.houses.set(info.s, h); }
+  h.info = info; h.H.setOwner(info.n); h.H.setFish(info.sp.map(x => SP[x[0]]).filter(Boolean));
+  updateBasket(h);
+}
+function updateBasket(h) { const online = [...G.players.values()].some(p => p.info && p.info.name === h.info.n); h.H.bdog.visible = !!h.info.d && !online; }
+let houseT = 0;
+function updateHouses(dt) {
+  houseT -= dt; const slow = houseT <= 0; if (slow) houseT = 1;
+  for (const h of G.houses.values()) {
+    const slot = S.HOUSE_SLOTS[h.info.s], d = Math.hypot(camera.position.x - slot.x, camera.position.z - slot.z);
+    h.H.root.visible = d < 260; if (d < 40) h.H.update(dt);
+    if (slow) updateBasket(h);
+  }
+}
+function nearHouseAq() {
+  let best = null, bd = 4.2;
+  for (const h of G.houses.values()) { const s = S.HOUSE_SLOTS[h.info.s], ax = s.x, az = s.z + S.HOUSE_D / 2 - 1.6, d = Math.hypot(me.x - ax, me.z - az); if (d < bd) { bd = d; best = h; } }
+  return best;
+}
+
 /* ------------------------------------------------------------------ vangst */
 function onCatch(m) {
   const sp = SP[m.fish.sp], card = $('catchCard'); G.catchCard = { fid: m.fid, fish: m.fish, until: performance.now() + m.ms, ms: m.ms }; G.actHeld = false;
@@ -320,17 +345,19 @@ function findInteract() {
   cons('board', { x: 10, z: 22 }, 6, '📌 Prikbord · wedstrijden en geruchten');
   for (const g of S.GATES) cons('gate', g, 12, `🚧 Hek: ${PONDS[g.pond].name}`);
   if (G.merchant) cons('travel', G.merchant, 9, '🧳 Reizende verkoper');
+  const aq = nearHouseAq(); if (aq && bd > 3) { best = { kind: 'aq', o: aq, text: `🐠 Aquarium van ${aq.info.n}${aq.info.d ? ' · 🐕 ' + aq.info.d : ''}` }; }
   return best;
 }
 function interact() {
   const it = G.interact; if (!it) return; A.sfx.ui();
   if (it.kind === 'shop') openPanel('shop', { shop: it.o, tab: UI.shopTabs(it.o)[0] });
   else if (it.kind === 'fire') openPanel('bag'); else if (it.kind === 'board') openPanel('board'); else if (it.kind === 'gate') openPanel('quests');
+  else if (it.kind === 'aq') openPanel('aq', { slot: it.o.info.s });
   else if (it.kind === 'travel') openPanel('shop', { shop: { type: 'travel', name: 'Reizende verkoper', ...G.merchant }, tab: 'Aanbod', items: G.merchant.items });
 }
 
 /* ------------------------------------------------------------------ panelen */
-const TITLES = { shop: '🛒 Winkel', bag: '🎒 Tas', book: '📖 Visboek', quests: '📋 Opdrachten', talents: '⭐ Talenten', ach: '🏅 Prestaties', map: '🗺️ Kaart', players: '👥 Spelers en handel', settings: '☰ Menu', board: '📌 Prikbord', help: '❓ Besturing' };
+const TITLES = { aq: '🐠 Aquarium', shop: '🛒 Winkel', bag: '🎒 Tas', book: '📖 Visboek', quests: '📋 Opdrachten', talents: '⭐ Talenten', ach: '🏅 Prestaties', map: '🗺️ Kaart', players: '👥 Spelers en handel', settings: '☰ Menu', board: '📌 Prikbord', help: '❓ Besturing' };
 function openPanel(name, arg) {
   try { document.exitPointerLock(); } catch { }
   G.panel = { name, arg: arg || {} }; G.keys.clear(); G.actHeld = false; $('panelTitle').textContent = TITLES[name] || ''; $('panel').classList.remove('hidden'); renderPanel();
@@ -346,6 +373,7 @@ function renderPanel() {
     case 'quests': body.innerHTML = UI.questsHTML(s); break;
     case 'talents': body.innerHTML = UI.talentsHTML(s); break;
     case 'ach': body.innerHTML = UI.achHTML(s); break;
+    case 'aq': { const h = G.houses.get(P.arg.slot); body.innerHTML = h ? UI.aqHTML(h.info) : '<div class="note">Dit huis is leeg.</div>'; break; }
     case 'players': body.innerHTML = UI.playersHTML(s, { others, fid: P.arg.fid }); break;
     case 'board': body.innerHTML = UI.boardHTML(s, { contest: G.contest, weekend: G.weekend }); api('/api/leaderboard').then(lb => { const e = $('lbBoard'); if (e) e.innerHTML = UI.lbHTML(lb); }).catch(() => { }); break;
     case 'settings': body.innerHTML = UI.settingsHTML(G.settings); break;
@@ -370,7 +398,7 @@ $('panelBody').addEventListener('click', e => {
     case 'offer': { const to = +$('tradeTo').value, fid = +$('tradeFish').value, price = +$('tradePrice').value | 0; send({ t: 'offer', to, fid, price }); break; }
     case 'contest': send({ t: 'contest' }); break;
     case 'help': openPanel('help'); break; case 'photo': closePanel(); startPhoto(); break;
-    case 'leave': closePanel(); send({ t: 'leave' }); break; case 'close': closePanel(); break;
+    case 'home': closePanel(); send({ t: 'home' }); break; case 'leave': closePanel(); send({ t: 'leave' }); break; case 'close': closePanel(); break;
   }
 });
 $('panelBody').addEventListener('input', e => {
@@ -525,6 +553,7 @@ function startGame(m) {
   for (const id of [...G.players.keys()]) removePlayer(id); for (const f of G.fish.values()) scene.remove(f.mesh); G.fish.clear(); E_me = null;
   me.x = S.SPAWN.x; me.z = S.SPAWN.z; me.mount = 'walk'; me.fs = 0; me.yaw = Math.PI; me.pitch = -0.2; G.fight = null; G.catchCard = null; G.actHeld = false; G.reelSent = false;
   for (const p of m.players) addPlayer(p);
+  for (const h of G.houses.values()) scene.remove(h.H.root); G.houses.clear(); for (const h of m.houses || []) setHouse(h);
   world.setUnlocked(G.save.unlocked); world.setMerchant(G.merchant);
   showScreen('game'); closePanel(); if (isTouch) $('touch').classList.remove('hidden'); else $('touch').classList.add('hidden');
   $('catchCard').classList.add('hidden'); $('fightUI').classList.add('hidden'); setStatus('', ''); $('feed').innerHTML = ''; updateHUD(); updateHotbar(); updateContest();
@@ -598,7 +627,7 @@ function frame() {
   requestAnimationFrame(frame); if (!renderer) return;
   const dt = Math.min(0.05, clock.getDelta()); frameN++; G.fps += (1 / Math.max(dt, 0.001) - G.fps) * 0.05;
   if (G.inGame && E_me) {
-    updateMe(dt); syncReel(); updatePlayers(dt); updateCamera(dt); computeAim(); updateFish(dt); updateAmbient(dt);
+    updateMe(dt); syncReel(); updatePlayers(dt); updateHouses(dt); updateCamera(dt); computeAim(); updateFish(dt); updateAmbient(dt);
     const ph = phase(), swamp = S.zoneOf(me.x, me.z) === 2 || nearPond() === 2 && Math.hypot(me.x - PONDS[2].x, me.z - PONDS[2].z) < 140, inSnow = Math.hypot(me.x - PONDS[4].x, me.z - PONDS[4].z) < PONDS[4].zr * 1.2;
     const L = world.update(dt, camera, ph, G.weather, { snow: inSnow, swamp, fireflies: true, onThunder: () => { A.sfx.thunder(); } });
     for (const n of world.npcs) { n.update(dt, 0, 0); n.rod.visible = false; }
