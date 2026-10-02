@@ -87,12 +87,12 @@ def build(look):
     for n, g in (("legFL", (-0.11, 0.34, 0.26)), ("legFR", (0.11, 0.34, 0.26)), ("legBL", (-0.11, 0.34, -0.26)), ("legBR", (0.11, 0.34, -0.26)),
                  ("head", (0, 0.72, 0.38)), ("tail", (0, 0.58, -0.38))): c.pivot(n, g)
     # romp: borst, middenstuk, achterlijf, buik, nek
-    c.part("body", "sphere", fur, (0.32, 0.34, 0.34), (0, 0.5, 0.2))                    # borstkas
-    c.part("body", "sphere", fur, (0.3, 0.32, 0.5), (0, 0.5, -0.02))                     # middenstuk
-    c.part("body", "sphere", fur, (0.3, 0.32, 0.32), (0, 0.5, -0.24))                    # achterlijf / heupen
+    c.part("body", "sphere", fur, (0.33, 0.37, 0.42), (0, 0.5, 0.18))                    # borstkas
+    c.part("body", "sphere", fur, (0.31, 0.34, 0.66), (0, 0.5, -0.02))                     # middenstuk
+    c.part("body", "sphere", fur, (0.3, 0.34, 0.4), (0, 0.5, -0.22))                    # achterlijf / heupen
     c.part("body", "sphere", belly, (0.24, 0.14, 0.5), (0, 0.37, 0.02))                  # buik
     c.part("body", "sphere", belly, (0.22, 0.2, 0.16), (0, 0.46, 0.34))                  # borst-bef
-    if L["saddle"]: c.part("body", "sphere", L["saddle"], (0.27, 0.1, 0.5), (0, 0.66, -0.02))   # zadelvlek
+    if L["saddle"]: c.part("body", "sphere", L["saddle"], (0.285, 0.15, 0.56), (0, 0.6, -0.02))   # zadelvlek
     c.part("body", "sphere", fur, (0.2, 0.26, 0.24), (0, 0.62, 0.33), rot=(-0.5, 0, 0))   # nek
     # halsband met penning
     c.part("body", "cyl", L["collar"], (0.2, 0.05, 0.2), (0, 0.64, 0.34), rot=(-0.5, 0, 0), rough=0.5)
@@ -119,10 +119,11 @@ def build(look):
         c.part("head", "sphere", ear, (0.05, 0.09, 0.07), (sx * 0.14, -0.04, 0.05), rot=(0, 0, sx * -0.35))
         c.part("head", "sphere", fur2 or fur, (0.1, 0.08, 0.12), (sx * 0.09, -0.02, 0.15))               # wangen
     if L["mask"]: c.part("head", "sphere", L["mask"], (0.17, 0.14, 0.1), (0, 0.02, 0.17))                 # masker (husky)
-    # staart: gebogen reeks bolletjes, punt lichter
-    for i, (y, z, s, rx) in enumerate(((0.04, -0.07, 0.07, -1.0), (0.12, -0.12, 0.065, -0.7), (0.21, -0.14, 0.06, -0.3), (0.29, -0.12, 0.055, 0.2))):
-        col = L["tailtip"] if (i == 3 and L["tailtip"]) else fur
-        c.part("tail", "sphere", col, (s, s, 0.14 if i < 3 else 0.12), (0, y, z), rot=(rx, 0, 0))
+    # staart: gebogen reeks overlappende bollen (aaneengesloten), punt lichter
+    segs = ((0.03, -0.06, 0.11, -0.9), (0.09, -0.12, 0.105, -0.7), (0.16, -0.16, 0.1, -0.45), (0.23, -0.18, 0.095, -0.2), (0.3, -0.18, 0.09, 0.05), (0.36, -0.16, 0.085, 0.3))
+    for i, (y, z, w, rx) in enumerate(segs):
+        col = L["tailtip"] if (i >= 4 and L["tailtip"]) else fur
+        c.part("tail", "sphere", col, (w, w, 0.19), (0, y, z), rot=(rx, 0, 0))
     c.finish()
     return c
 
