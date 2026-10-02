@@ -34,6 +34,18 @@ function flush() {
   } catch (e) { console.error('db schrijven mislukt:', e.message); }
 }
 function markDirty() { if (!saveTimer) saveTimer = setTimeout(flush, 1500); }
+/* dagelijkse back-up van db.json (laatste 7 bewaard) */
+function backup() {
+  try {
+    if (!fs.existsSync(DB_FILE)) return;
+    const dir = path.join(DATA_DIR, 'backups'); fs.mkdirSync(dir, { recursive: true });
+    const f = path.join(dir, 'db-' + new Date().toISOString().slice(0, 10) + '.json');
+    if (!fs.existsSync(f)) fs.copyFileSync(DB_FILE, f);
+    const all = fs.readdirSync(dir).filter(n => /^db-\d{4}-\d{2}-\d{2}\.json$/.test(n)).sort();
+    for (const n of all.slice(0, -7)) fs.unlinkSync(path.join(dir, n));
+  } catch (e) { console.error('back-up mislukt:', e.message); }
+}
+backup(); setInterval(() => { flush(); backup(); }, 3600000).unref();
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { flush(); process.exit(0); });
 
 /* ------------------------------------------------------------------ accounts */

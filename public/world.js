@@ -228,7 +228,8 @@ export class World {
       }
     }
     this.forest = new THREE.Group(); const mm = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
-    this.treeCount = 0;
+    this.treeCount = 0; this.treeGrid = new Map();
+    for (const [type, list] of Object.entries(buckets)) { if (type === 'bush' || type === 'rock' || type === 'reed') continue; for (const [x, , z, sc] of list) { const k = Math.floor(x / 16) + ',' + Math.floor(z / 16); (this.treeGrid.get(k) || this.treeGrid.set(k, []).get(k)).push([x, z, sc]); } }
     for (const [type, list] of Object.entries(buckets)) {
       const geo = TREE_GEO[type](), im = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }), list.length), tint = TREE_TINT[type];
       list.forEach(([x, y, z, s, r], i) => {
@@ -303,6 +304,19 @@ export class World {
   }
 
   /* ---------------- elk beeld */
+  /* eerste punt (0..1) op het lijnstuk a->b dat door een boomstam wordt geblokkeerd, of 1 */
+  treeBlock(ax, ay, az, bx, by, bz) {
+    if (!this.treeGrid) return 1;
+    const N = 8;
+    for (let i = 1; i <= N; i++) {
+      const t = i / N, x = ax + (bx - ax) * t, z = az + (bz - az) * t, cx = Math.floor(x / 16), cz = Math.floor(z / 16);
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+        const l = this.treeGrid.get((cx + dx) + ',' + (cz + dz)); if (!l) continue;
+        for (const [tx, tz, sc] of l) if (Math.hypot(tx - x, tz - z) < 0.9 * sc + 0.4) return Math.max(0.2, t - 1 / N);
+      }
+    }
+    return 1;
+  }
   update(dt, cam, phase, weather, ctx = {}) {
     this.t += dt;
     const e = S.sunElev(phase), sunY = Math.max(-1, Math.min(1, e - 0.15)), a = phase * Math.PI * 2;

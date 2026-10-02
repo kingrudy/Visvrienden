@@ -99,6 +99,9 @@ export function appeal(sp, bait, tc, weather) {
   const t = sp.t;
   a *= t === 'any' ? 1 : t === 'dag' ? (tc === 'dag' ? 1 : tc === 'sch' ? 0.6 : 0.2) : t === 'nacht' ? (tc === 'nacht' ? 1 : tc === 'sch' ? 0.5 : 0.2) : (tc === 'sch' ? 1.5 : 0.6);
   if (bait === 'glow' && tc !== 'dag') a *= 1.4;
+  if (weather === 'rain' && ['worm', 'made'].includes(bait)) a *= 1.15;
+  if (weather === 'clear' && ['vlieg', 'spinner'].includes(bait) && tc === 'dag') a *= 1.1;
+  if (weather === 'storm' && ['levend', 'glow'].includes(bait)) a *= 1.2;
   a *= weather === 'rain' ? 1.25 : weather === 'storm' ? 1.1 : weather === 'fog' ? 0.9 : 1;
   return a;
 }
@@ -133,7 +136,7 @@ export class Room {
       dirty: true, dirtyAt: 0, dogT: rnd(60, CFG.dogDigEvery), hintT: 0, tpAt: 0, chatAt: 0 };
     P.lastOk = { x: P.x, z: P.z };
     this.players.set(P.id, P); this.emptySince = null;
-    conn.send({ t: 'joined', id: P.id, room: this.summary, now, save: this.safeSave(P), weather: this.weather, merchant: this.merchantInfo(), players: [...this.players.values()].map(q => this.pinfo(q)), contest: this.contestInfo(), weekend: isWeekend() });
+    conn.send({ t: 'joined', id: P.id, room: this.summary, now, save: this.safeSave(P), weather: this.weather, merchant: this.merchantInfo(), players: [...this.players.values()].map(q => this.pinfo(q)), contest: this.contestInfo(), weekend: isWeekend(), featured: S.featuredSpecies().id });
     this.broadcast({ t: 'pinfo', p: this.pinfo(P) }, P);
     this.feed(`${P.name} is komen vissen.`, 'info', P);
     return P;
@@ -281,7 +284,7 @@ export class Room {
           if (f.busy || f.scared > 0) continue;
           const d = Math.hypot(f.x - P.bx, f.z - P.bz); if (d > (f.sp.leg ? 30 : 18)) continue;
           const a = appeal(f.sp, bait, tc, this.weather); if (a <= 0) continue;
-          const prob = clamp(a * 0.75 * rs.bite * (1 + rs.luck * 0.07 * f.sp.rar), 0, 0.9);
+          const prob = clamp(a * 0.75 * rs.bite * (1 + rs.luck * 0.07 * f.sp.rar) * (f.sp.id === S.featuredSpecies().id ? S.FEATURED_BITE : 1), 0, 0.9);
           if (Math.random() < prob) { f.busy = P.id; f.state = 'chase'; P.chase = f.id; break; }
         }
       }
@@ -330,7 +333,7 @@ export class Room {
     this.removeFish(f);
     if (sp.leg) this.legCd[sp.id] = Date.now() + CFG.legendRespawn * 1000;
     P.fs = 0; P.fight = null; P.chase = null; P.reel = false;
-    const fish = { sp: sp.id, w: f.w, pond: sp.pond, t: Date.now() };
+    const fish = { sp: sp.id, w: f.w, pond: sp.pond, t: Date.now() }; P.lastCatch = { sp: sp.id, w: f.w };
     const rec = !s.book[sp.id] || s.book[sp.id].best < f.w;
     const B = s.book[sp.id] || (s.book[sp.id] = { n: 0, best: 0, first: Date.now() });
     B.n++; if (f.w > B.best) B.best = f.w;
@@ -434,6 +437,7 @@ export class Room {
       case 'cook': return this.cook(P, m);
       case 'mount': return this.setMount(P, String(m.m));
       case 'say': return this.say(P, m);
+      case 'emote': { const e = ['wave', 'laugh', 'thumb', 'fish'].indexOf(m.k); if (e < 0 || Date.now() - (P.emoteAt || 0) < 1500) return; P.emoteAt = Date.now(); const lc = m.k === 'fish' ? P.lastCatch : null; this.broadcast({ t: 'emote', id: P.id, k: m.k, sp: lc ? lc.sp : '', w: lc ? lc.w : 0 }); return; }
       case 'offer': return this.offer(P, m);
       case 'offerReply': return this.offerReply(P, m);
       case 'contest': return this.startContest(P);
@@ -560,7 +564,7 @@ export class Room {
     if (!this.nearShop(P, ['main', 'kiosk', 'smith'])) return this.toast(P, 'Verkopen kan bij een winkel of kiosk.', 'warn');
     const s = P.save, ids = m.all ? s.inv.map(f => f.id) : (Array.isArray(m.ids) ? m.ids.map(Number) : []);
     let total = 0, n = 0; const mult = 1 + 0.04 * s.talents.handelaar;
-    s.inv = s.inv.filter(f => { if (!ids.includes(f.id)) return true; total += Math.round(S.fishValue(SP[f.sp], f.w) * mult); n++; return false; });
+    s.inv = s.inv.filter(f => { if (!ids.includes(f.id)) return true; total += Math.round(S.fishValue(SP[f.sp], f.w) * mult * (f.sp === S.featuredSpecies().id ? S.FEATURED_PRICE : 1)); n++; return false; });
     if (!n) return;
     s.coins += total; s.stats.sold += n; this.quest(P, 'sell', n); this.toast(P, `${n} vis verkocht voor ${total} munten.`, 'good'); this.checkAch(P); this.dirty(P);
   }

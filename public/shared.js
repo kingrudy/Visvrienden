@@ -195,6 +195,13 @@ export const SPECIES = RAW.trim().split('\n').map((ln, i) => {
 });
 export const SP = Object.fromEntries(SPECIES.map(s => [s.id, s]));
 for (const s of SPECIES) if (s.leg) s.rar = 4;
+/* vis van de week: elke week (maandag) krijgt een zeldzame soort een bonus */
+export const weekNo = (t = Date.now()) => Math.floor((t / 86400000 + 3) / 7);
+export function featuredSpecies(t = Date.now()) {
+  const pool = SPECIES.filter(s => s.rar >= 2 && !s.leg && !PONDS[s.pond].secret);
+  return pool[(weekNo(t) * 7 + 3) % pool.length];
+}
+export const FEATURED_PRICE = 1.5, FEATURED_BITE = 2.5;
 export const speciesOf = pond => SPECIES.filter(s => s.pond === pond);
 export const fishValue = (sp, w) => Math.max(2, Math.round(sp.p * w * RARITY[sp.rar].m * (sp.leg ? 1 : 1)));
 export const fmtKg = w => (w >= 10 ? w.toFixed(1) : w.toFixed(2)).replace('.', ',') + ' kg';

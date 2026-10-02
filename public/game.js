@@ -61,6 +61,7 @@ function onMsg(m) {
     case 'pinfo': addPlayer(m.p); break;
     case 'pgone': removePlayer(m.id); break;
     case 'ev': onEvent(m); break;
+    case 'emote': { const E = G.players.get(m.id); if (!E) break; const T = { wave: '👋', laugh: '😄', thumb: '👍' }; const txt = m.k === 'fish' ? (m.sp && SP[m.sp] ? `🐟 ${SP[m.sp].name} ${S.fmtKg(m.w)}` : '🐟 Nog niks gevangen…') : T[m.k]; if (txt) chatBubble(m.id, txt); break; }
     case 'toast': toast(m.msg, m.kind); if (m.kind === 'good') A.sfx.coin(); break;
     case 'feed': feed(m.msg, m.kind); break;
     case 'chat': feed(`<b>${UI.esc(m.name)}</b>: ${UI.esc(m.text)}`, 'chat', true); chatBubble(m.id, m.text); break;
@@ -102,6 +103,8 @@ function refreshLobby() {
   const s = G.save; $('lobName').textContent = `Hoi ${G.name}!`; $('lobInfo').textContent = `Niveau ${s.lvl} · 🪙 ${s.coins} · ${Object.keys(s.book).length}/${SPECIES.length} soorten gevangen`;
   $('looks').innerHTML = ['🧢', '🎩', '👒', '🧥'].map((e, i) => `<button class="${s.look === i ? 'on' : ''}" data-look="${i}">${e}</button>`).join('');
   $('looks').querySelectorAll('button').forEach(b => b.onclick = () => { send({ t: 'look', v: +b.dataset.look }); G.save.look = +b.dataset.look; refreshLobby(); });
+  const fs = S.featuredSpecies();
+  $('lobMap').innerHTML = `<div class="note" style="margin-bottom:6px">⭐ Vis van de week: <b>${UI.esc(fs.name)}</b> (${UI.esc(PONDS[fs.pond].name)}), extra kans en 1,5× waarde</div>` + PONDS.map(p => { const list = S.speciesOf(p.id), got = list.filter(x => s.book[x.id]).length, open = !p.req || s.unlocked.includes(p.id), hid = p.secret && !s.disc.includes(p.id) && !got; return `<div class="lbrow" style="opacity:${open || got ? 1 : 0.5}"><span>${hid ? '🔮 ???' : (open ? '🌊 ' : '🔒 ') + UI.esc(p.name)}</span><span>${got}/${list.length}</span></div>`; }).join('');
   renderRooms(); api('/api/leaderboard').then(lb => { $('lb').innerHTML = lb.heaviest.length ? lb.heaviest.slice(0, 6).map((x, i) => `<div class="lbrow"><span>${i + 1}. ${UI.esc(x.name)}</span><span>${S.fmtKg(x.v)} ${UI.esc(SP[x.sp]?.name || '')}</span></div>`).join('') : 'Nog niemand heeft gevangen. Wees de eerste!'; }).catch(() => { });
 }
 document.querySelectorAll('[data-pn]').forEach(b => b.addEventListener('click', () => openPanel(b.dataset.pn)));
@@ -231,6 +234,7 @@ function updateCamera(dt) {
   const dist = G.photo ? me.dist * 1.2 : me.dist * (me.fs ? 0.85 : 1);
   const tgt = new THREE.Vector3(E.x, ty, E.z).addScaledVector(right, G.photo ? 0 : -shoulder);
   let want = tgt.clone().addScaledVector(fwd, -dist);
+  if (!G.photo && world) { const k = world.treeBlock(tgt.x, tgt.y, tgt.z, want.x, want.y, want.z); if (k < 1) want = tgt.clone().lerp(want, k); }
   const gy = S.groundY(want.x, want.z); if (want.y < gy + 0.5) want.y = gy + 0.5;
   const wy = S.pondWater(want.x, want.z); if (wy >= 0 && want.y < PONDS[wy].waterY + 0.4) want.y = PONDS[wy].waterY + 0.4;
   camera.position.lerp(want, 1 - Math.exp(-dt * 18)); if (G.shake > 0) { camera.position.x += (Math.random() - 0.5) * G.shake; camera.position.y += (Math.random() - 0.5) * G.shake; G.shake = Math.max(0, G.shake - dt * 0.6); }
@@ -474,6 +478,7 @@ addEventListener('keydown', e => {
   G.keys.add(e.code); if (e.repeat) return;
   switch (e.code) {
     case 'Space': e.preventDefault(); actDown(); break; case 'KeyE': interact(); break; case 'KeyX': cancelLine(); break; case 'KeyB': toggleBoat(); break; case 'KeyV': toggleVehicle(); break;
+    case 'KeyZ': send({ t: 'emote', k: 'wave' }); break; case 'KeyN': send({ t: 'emote', k: 'laugh' }); break; case 'KeyK': send({ t: 'emote', k: 'thumb' }); break; case 'KeyL': send({ t: 'emote', k: 'fish' }); break;
     case 'KeyF': decideCatch(true); break; case 'KeyG': decideCatch(false); break; case 'BracketLeft': cycleBait(-1); break; case 'BracketRight': cycleBait(1); break;
     case 'KeyI': openPanel('bag'); break; case 'KeyJ': openPanel('book'); break; case 'KeyO': openPanel('quests'); break; case 'KeyM': openPanel('map'); break; case 'KeyT': openPanel('talents'); break; case 'KeyH': openPanel('players'); break; case 'KeyP': startPhoto(); break;
   }
@@ -521,6 +526,7 @@ function startGame(m) {
   showScreen('game'); closePanel(); if (isTouch) $('touch').classList.remove('hidden'); else $('touch').classList.add('hidden');
   $('catchCard').classList.add('hidden'); $('fightUI').classList.add('hidden'); setStatus('', ''); $('feed').innerHTML = ''; updateHUD(); updateHotbar(); updateContest();
   feed(`Welkom in ${m.room.name}! Druk op ? / Esc voor hulp en besturing.`, 'info');
+  G.featured = m.featured; if (SP[m.featured]) feed(`⭐ Vis van de week: <b>${UI.esc(SP[m.featured].name)}</b> (${PONDS[SP[m.featured].pond].name}): bijt vaker en verkoopt voor 1,5×.`, 'info', true);
   const first = !G.save.stats.catches && !store.get('seenHelp', false); if (first) { store.set('seenHelp', true); setTimeout(() => openPanel('help'), 600); }
   camera.position.set(me.x, 4, me.z + 6);
 }
