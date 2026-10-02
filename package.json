@@ -1,0 +1,8 @@
+{
+  "name": "visvrienden",
+  "version": "1.0.0",
+  "description": "Multiplayer sportvis-spel in de browser",
+  "type": "module",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" }
+}

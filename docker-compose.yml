@@ -1,0 +1,11 @@
+services:
+  visvrienden:
+    build: .
+    container_name: visvrienden
+    restart: unless-stopped
+    ports:
+      - "8304:8304"
+    volumes:
+      - visvrienden-data:/data
+volumes:
+  visvrienden-data:
