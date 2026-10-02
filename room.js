@@ -78,6 +78,7 @@ export function ensureSave(u) {
   if (!s.book || typeof s.book !== 'object') s.book = {};
   s.mounts = Object.assign({ bike: false, scooter: false, boat: false }, s.mounts || {});
   if (s.dog && typeof s.dog.name !== 'string') s.dog = null;
+  if (String(u.name).toLowerCase() === 'toon') s.dog = { name: 'Iron Dog' };      // speler Toon heeft altijd een Ironman-hond
   s.stats = Object.assign({ catches: 0, released: 0, sold: 0, best: 0, bestSp: '', totalKg: 0, rareCatches: 0, epicCatches: 0, legCatches: 0, nightCatches: 0, stormCatches: 0, contestWins: 0, cooked: 0, pond: {} }, s.stats || {});
   if (!s.stats.pond || typeof s.stats.pond !== 'object') s.stats.pond = {};
   s.unlocked = Array.isArray(s.unlocked) ? [...new Set(s.unlocked.filter(i => PONDS[i]?.req))] : [];

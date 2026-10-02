@@ -146,7 +146,7 @@ function addPlayer(info) {
   if (!o.name || o.look !== info.look) { /* look verandert alleen in de lobby */ }
   E.h.setName(info.name + (E.isMe ? '' : ` · ${info.lvl}`), E.isMe ? '#8ff0c0' : '#ffffff'); E.h.lab.visible = !E.isMe;
   E.h.setRod(RODS[info.rod]?.color || '#c8a458');
-  if (info.dog && !E.dogM) { E.dogM = M.makeDog(info.id % 4); E.dogPos = { x: E.x - 1.5, z: E.z - 1.5 }; scene.add(E.dogM); } else if (!info.dog && E.dogM) { scene.remove(E.dogM); E.dogM = null; }
+  if (info.dog && !E.dogM) { E.dogM = M.makeDog(info.id % 4, String(info.name).toLowerCase() === 'toon' ? 'ironman' : null); E.dogPos = { x: E.x - 1.5, z: E.z - 1.5 }; scene.add(E.dogM); } else if (!info.dog && E.dogM) { scene.remove(E.dogM); E.dogM = null; }
   if (E.isMe && G.inGame && info.mount) { me.mount = info.mount; }
 }
 function removePlayer(id) { const E = G.players.get(id); if (!E) return; scene.remove(E.h.root, E.bobber, E.line); if (E.veh) scene.remove(E.veh.mesh); if (E.dogM) scene.remove(E.dogM); G.players.delete(id); }
@@ -277,6 +277,11 @@ function setHouse(info) {
   if (!h) { const H = M.makeHouse(info.s); H.root.position.set(slot.x, S.heightAt(slot.x, slot.z), slot.z); scene.add(H.root); h = { H, info }; G.houses.set(info.s, h); }
   h.info = info; h.H.setOwner(info.n); h.H.setFish(info.sp.map(x => SP[x[0]]).filter(Boolean));
   updateBasket(h);
+}
+function houseOf(E) {      // het huis van deze speler, als hij er (bijna) binnen staat
+  const nm = E.info && E.info.name; if (!nm) return null;
+  for (const h of G.houses.values()) if (h.info.n === nm) { const s = S.HOUSE_SLOTS[h.info.s]; if (Math.abs(E.x - s.x) < S.HOUSE_W / 2 + 1.2 && Math.abs(E.z - s.z) < S.HOUSE_D / 2 + 1.2) return s; }
+  return null;
 }
 function updateBasket(h) { const online = [...G.players.values()].some(p => p.info && p.info.name === h.info.n); h.H.bdog.visible = !!h.info.d && !online; }
 let houseT = 0;
@@ -597,10 +602,18 @@ function updatePlayers(dt) {
     }
     // hond
     if (E.dogM) {
-      const dp = E.dogPos, tx = E.x - Math.sin(E.ry) * 1.8 + Math.cos(E.ry) * 1.1, tz = E.z - Math.cos(E.ry) * 1.8 - Math.sin(E.ry) * 1.1, dx = tx - dp.x, dz = tz - dp.z, dd = Math.hypot(dx, dz);
-      let sp = 0; if (dd > 1.4) { sp = Math.min(dd * 2.5, 9); const nx = dp.x + dx / dd * sp * dt, nz = dp.z + dz / dd * sp * dt; if (S.walkable(nx, nz) && !S.onJetty(nx, nz) || S.onJetty(nx, nz)) { dp.x = nx; dp.z = nz; E.dogM.rotation.y = Math.atan2(dx, dz); } else if (dd > 8) { dp.x = tx; dp.z = tz; } }
+      const dp = E.dogPos, dm = E.dogM, hs = houseOf(E);
+      let tx = E.x - Math.sin(E.ry) * 1.8 + Math.cos(E.ry) * 1.1, tz = E.z - Math.cos(E.ry) * 1.8 - Math.sin(E.ry) * 1.1, basket = false;
+      if (hs) {       // eigenaar is thuis: hond gaat in zijn mand liggen (via de deur naar binnen)
+        const inside = (x, z) => Math.abs(x - hs.x) < S.HOUSE_W / 2 - 0.4 && Math.abs(z - hs.z) < S.HOUSE_D / 2 - 0.4, bx = hs.x - S.HOUSE_W / 2 + 1.3, bz = hs.z + S.HOUSE_D / 2 - 1.3, doorZ = hs.z - S.HOUSE_D / 2 - 1.0;
+        basket = true;
+        if (inside(dp.x, dp.z)) { tx = bx; tz = bz; } else if (Math.abs(dp.x - hs.x) < 0.8 && Math.abs(dp.z - doorZ) < 1.0) { tx = hs.x; tz = hs.z - 0.5; } else { tx = hs.x; tz = doorZ; }
+      }
+      const dx = tx - dp.x, dz = tz - dp.z, dd = Math.hypot(dx, dz), atBasket = basket && dd < 0.35 && Math.abs(dp.x - (hs.x - S.HOUSE_W / 2 + 1.3)) < 0.5;
+      let sp = 0; if (dd > (basket ? 0.3 : 1.4)) { sp = Math.min(dd * 2.5, basket ? 3 : 9); const nx = dp.x + dx / dd * sp * dt, nz = dp.z + dz / dd * sp * dt; if (S.walkable(nx, nz) && !S.onJetty(nx, nz) || S.onJetty(nx, nz)) { dp.x = nx; dp.z = nz; dm.rotation.y = Math.atan2(dx, dz); } else if (dd > 8) { dp.x = tx; dp.z = tz; } }
       if (dd > 30) { dp.x = E.x; dp.z = E.z; }
-      E.dogM.position.set(dp.x, S.groundY(dp.x, dp.z), dp.z); E.dogM.userData.update(dt, sp);
+      dm.userData.lying = atBasket; if (atBasket) { dp.x = hs.x - S.HOUSE_W / 2 + 1.3; dp.z = hs.z + S.HOUSE_D / 2 - 1.3; dm.rotation.y += angDiff(dm.rotation.y, 2.2) * Math.min(1, dt * 4); }
+      dm.position.set(dp.x, S.groundY(dp.x, dp.z) + (dm.userData.lieT > 0.5 ? 0.2 : 0), dp.z); dm.userData.update(dt, atBasket ? 0 : sp);
     }
     if (E.bub) { E.bubT -= dt; if (E.bubT <= 0) { E.h.root.remove(E.bub); E.bub = null; } }
   }

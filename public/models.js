@@ -163,10 +163,42 @@ export function makeFish(sp, glow) {
 
 /* ------------------------------------------------------------------ hond, reiger, eend */
 const DOG_COLS = ['#b8844a', '#e8d8b8', '#5a3a2a', '#8a8a8a'];
-export function makeDog(i = 0) {
-  const tpl = DOGS[i % 4];
+const IRON_MAP = { b8844a: '#b5121b', c89658: '#d12a2a', e8d0a0: '#f2b92c', '8a5a2a': '#7d0f17', d8aa70: '#f2b92c', c8423a: '#f2b92c' };
+const IRON_GLOW = new Set(['2a1a14', 'e8c84a']);                 // ogen en penning lichten op (arc reactor-blauw)
+function ironmanize(t, rz = 0.43, ry = 0.46) {
+  t.traverse(o => {
+    const m = /_([0-9a-f]{6})$/.exec(o.name || ''); if (!m) return;
+    for (const ch of o.children) if (ch.isMesh) {
+      if (IRON_GLOW.has(m[1])) ch.material = new THREE.MeshBasicMaterial({ color: '#8ff0ff' });
+      else if (IRON_MAP[m[1]]) ch.material = mat(IRON_MAP[m[1]], { flatShading: false });
+    }
+  });
+  const body = t.getObjectByName('body'); if (!body) return;
+  const rx = new THREE.Group(); rx.position.set(0, ry, rz); body.add(rx);
+  const ring = new THREE.Mesh(TORUS, mat('#f2b92c')); ring.scale.set(0.15, 0.15, 0.15); rx.add(ring);
+  const core = new THREE.Mesh(SPH, new THREE.MeshBasicMaterial({ color: '#b8f8ff' })); core.scale.set(0.09, 0.09, 0.04); rx.add(core);
+  const halo = new THREE.Mesh(SPH, new THREE.MeshBasicMaterial({ color: '#6fe4ff', transparent: true, opacity: 0.3, depthWrite: false })); halo.scale.set(0.2, 0.2, 0.08); rx.add(halo);
+}
+export function makeDog(i = 0, special = null) {
+  const g = makeDogBase(i, special), base = g.userData.update, u = g.userData;
+  u.lying = false; u.lieT = 0;
+  u.update = (dt, speed) => {
+    base(dt, speed);
+    u.lieT += (((u.lying ? 1 : 0) - u.lieT) * Math.min(1, dt * 5));
+    if (u.lieT > 0.01) {       // liggend in de mand: lichaam laag, pootjes ingeklapt, kop omlaag, rustig kwispelen
+      const k = u.lieT, f = x => x * k;
+      u.body.position.y = -0.17 * k + Math.sin(u.t * 1.2) * 0.004;
+      u.legs[0].rotation.x = f(-1.2); u.legs[1].rotation.x = f(-1.2); u.legs[2].rotation.x = f(1.15); u.legs[3].rotation.x = f(1.15);
+      if (u.head) u.head.rotation.x = f(0.3);
+      u.tail.rotation.y = Math.sin(u.t * 1.5) * 0.25 * k + u.tail.rotation.y * (1 - k);
+    } else if (u.head) u.head.rotation.x = 0;
+  };
+  return g;
+}
+function makeDogBase(i = 0, special = null) {
+  const tpl = DOGS[special === 'ironman' ? 0 : i % 4];
   if (tpl) {      // Blender-hond (public/models/dogN.glb, gemaakt met tools/make_dog.py)
-    const g = new THREE.Group(), t = tpl.clone(true); g.add(t); const n = k => t.getObjectByName(k);
+    const g = new THREE.Group(), t = tpl.clone(true); g.add(t); const n = k => t.getObjectByName(k); if (special === 'ironman') ironmanize(t);
     const legs = [n('legFL'), n('legFR'), n('legBL'), n('legBR')], tail = n('tail'), head = n('head'), body = n('body');
     if (legs.every(Boolean) && tail && head && body) {
       g.userData = { legs, tail, head, body, t: Math.random() * 9 };
@@ -174,13 +206,14 @@ export function makeDog(i = 0) {
       return g;
     }
   }
-  const c = DOG_COLS[i % 4], g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  const c = special === 'ironman' ? '#b5121b' : DOG_COLS[i % 4], g = new THREE.Group(), body = new THREE.Group(); body.name = 'body'; g.add(body);
   box(body, c, 0.3, 0.3, 0.7, 0, 0.45, 0); const head = new THREE.Group(); head.position.set(0, 0.7, 0.4); body.add(head);
   box(head, c, 0.26, 0.24, 0.26, 0, 0, 0); box(head, '#2a1a1a', 0.1, 0.08, 0.1, 0, -0.03, 0.16); box(head, '#3a2a1a', 0.07, 0.18, 0.05, -0.15, -0.02, 0); box(head, '#3a2a1a', 0.07, 0.18, 0.05, 0.15, -0.02, 0);
   const tail = new THREE.Group(); tail.position.set(0, 0.55, -0.35); body.add(tail); box(tail, c, 0.06, 0.06, 0.3, 0, 0.1, -0.12).rotation.x = 0.7;
   const legs = [[-0.1, 0.3], [0.1, 0.3], [-0.1, -0.3], [0.1, -0.3]].map(([x, z]) => { const l = new THREE.Group(); l.position.set(x, 0.32, z); body.add(l); box(l, c, 0.09, 0.32, 0.09, 0, -0.16, 0); return l; });
   g.userData = { legs, tail, head, body, t: Math.random() * 9 };
   g.userData.update = (dt, speed) => { const u = g.userData; u.t += dt * (3 + speed * 3); const s = Math.sin(u.t * 2) * Math.min(1, speed / 2) * 0.8; legs[0].rotation.x = s; legs[3].rotation.x = s; legs[1].rotation.x = -s; legs[2].rotation.x = -s; tail.rotation.y = Math.sin(u.t * 3) * 0.6; body.position.y = Math.abs(Math.sin(u.t * 2)) * 0.03 * Math.min(1, speed); };
+  if (special === 'ironman') ironmanize(g, 0.37, 0.5);
   return g;
 }
 export function makeHeron() {
@@ -339,10 +372,12 @@ export function makeHouse(slot = 0) {
   // hondenmand in de hoek
   const basket = new THREE.Group(); basket.position.set(-hw + 1.3, 0, hd - 1.3); g.add(basket);
   cyl(basket, '#b8864a', 0.85, 0.3, 0.85, 0, 0.17, 0); cyl(basket, '#8a6030', 0.7, 0.32, 0.7, 0, 0.19, 0, { }); cyl(basket, '#c85a5a', 0.66, 0.12, 0.66, 0, 0.22, 0);
-  const bdog = makeDog(0); bdog.scale.setScalar(0.85); bdog.position.set(0, 0.2, 0); bdog.userData.update(0, 0); bdog.rotation.y = 2.2; basket.add(bdog); bdog.visible = false;
+  const bdog = makeDog(0); bdog.scale.setScalar(0.85); bdog.position.set(0, 0.2, 0); bdog.userData.lying = true; bdog.userData.lieT = 1; bdog.userData.update(0, 0); bdog.rotation.y = 2.2; basket.add(bdog); bdog.visible = false;
   box(g, '#6a4a2a', 0.9, 0.5, 0.6, hw - 1.1, 0.25, hd - 0.8); box(g, '#d8d0b8', 0.5, 0.25, 0.4, hw - 1.1, 0.62, hd - 0.8);   // kastje met kist
   const H = { root: g, fishBox, bdog, basket, aq, plaque: null, fish: [], sig: '', t: Math.random() * 9 };
-  H.setOwner = name => { if (H.plaque) g.remove(H.plaque); H.plaque = plaque(`Huis van ${name}`); H.plaque.position.set(0, 3.55, -hd - 0.02); H.plaque.rotation.y = Math.PI; g.add(H.plaque); };
+  H.setOwner = name => {
+    const iron = String(name).toLowerCase() === 'toon';
+    if (iron !== H.iron) { H.iron = iron; const vis = H.bdog.visible; basket.remove(H.bdog); const d = makeDog(0, iron ? 'ironman' : null); d.scale.setScalar(0.85); d.position.set(0, 0.2, 0); d.rotation.y = 2.2; d.userData.lying = true; d.userData.lieT = 1; d.userData.update(0, 0); basket.add(d); d.visible = vis; H.bdog = d; } if (H.plaque) g.remove(H.plaque); H.plaque = plaque(`Huis van ${name}`); H.plaque.position.set(0, 3.55, -hd - 0.02); H.plaque.rotation.y = Math.PI; g.add(H.plaque); };
   // vissen in het aquarium: soorten die de eigenaar ooit ving, klein formaat
   H.setFish = species => {
     const sig = species.map(s => s.id).join(',');
