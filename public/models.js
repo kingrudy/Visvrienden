@@ -27,6 +27,44 @@ export function label(text, color = '#ffffff', size = 28) {
   s.scale.set(2.6, 0.65, 1); s.renderOrder = 10; return s;
 }
 
+/* ------------------------------------------------------------------ Blender-modellen (.glb) */
+// Kleine eigen .glb-lader (alleen wat Blender hier exporteert: meshes, kleuren, node-hiërarchie).
+export const ANGLERS = [null, null, null, null];
+function parseGLB(buf) {
+  const dv = new DataView(buf); if (dv.getUint32(0, true) !== 0x46546c67) throw new Error('geen glb');
+  let off = 12, json = null, bin = null;
+  while (off < buf.byteLength) { const len = dv.getUint32(off, true), type = dv.getUint32(off + 4, true); const chunk = buf.slice(off + 8, off + 8 + len); if (type === 0x4e4f534a) json = JSON.parse(new TextDecoder().decode(chunk)); else if (type === 0x004e4942) bin = chunk; off += 8 + len; }
+  const NC = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }, CT = { 5120: Int8Array, 5121: Uint8Array, 5122: Int16Array, 5123: Uint16Array, 5125: Uint32Array, 5126: Float32Array };
+  const acc = i => {
+    const a = json.accessors[i], bv = json.bufferViews[a.bufferView], T = CT[a.componentType], n = NC[a.type], base = (bv.byteOffset || 0) + (a.byteOffset || 0), stride = bv.byteStride;
+    if (!stride || stride === T.BYTES_PER_ELEMENT * n) return new T(bin.slice(base, base + a.count * n * T.BYTES_PER_ELEMENT));
+    const out = new T(a.count * n), src = new DataView(bin); for (let k = 0; k < a.count; k++) for (let j = 0; j < n; j++) { const o = base + k * stride + j * T.BYTES_PER_ELEMENT; out[k * n + j] = T === Float32Array ? src.getFloat32(o, true) : T === Uint16Array ? src.getUint16(o, true) : T === Uint32Array ? src.getUint32(o, true) : src.getUint8(o); }
+    return out;
+  };
+  const mats = (json.materials || []).map(m => { const f = m.pbrMetallicRoughness?.baseColorFactor || [1, 1, 1, 1]; return new THREE.MeshLambertMaterial({ color: new THREE.Color().setRGB(f[0], f[1], f[2], THREE.LinearSRGBColorSpace) }); });
+  const meshes = json.meshes.map(me => me.primitives.map(p => {
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(acc(p.attributes.POSITION), 3));
+    if (p.attributes.NORMAL) g.setAttribute('normal', new THREE.BufferAttribute(acc(p.attributes.NORMAL), 3)); else g.computeVertexNormals();
+    if (p.indices !== undefined) g.setIndex(new THREE.BufferAttribute(acc(p.indices), 1));
+    return new THREE.Mesh(g, mats[p.material] || new THREE.MeshLambertMaterial({ color: '#cccccc' }));
+  }));
+  const nodes = json.nodes.map(nd => {
+    const o = new THREE.Group(); o.name = nd.name || '';
+    if (nd.matrix) o.applyMatrix4(new THREE.Matrix4().fromArray(nd.matrix)); else { if (nd.translation) o.position.fromArray(nd.translation); if (nd.rotation) o.quaternion.fromArray(nd.rotation); if (nd.scale) o.scale.fromArray(nd.scale); }
+    if (nd.mesh !== undefined) for (const m of meshes[nd.mesh]) o.add(m.clone());
+    return o;
+  });
+  json.nodes.forEach((nd, i) => (nd.children || []).forEach(c => nodes[i].add(nodes[c])));
+  const sc = json.scenes[json.scene || 0], out = new THREE.Group();
+  for (const i of sc.nodes) out.add(nodes[i]);
+  out.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+  return out;
+}
+export async function loadAnglers(base = 'models/') {
+  await Promise.all([0, 1, 2, 3].map(async i => { try { const r = await fetch(`${base}angler${i}.glb`); if (!r.ok) return; ANGLERS[i] = parseGLB(await r.arrayBuffer()); } catch (e) { console.warn('angler' + i, e.message); } }));
+  return ANGLERS.filter(Boolean).length;
+}
+
 /* ------------------------------------------------------------------ visser */
 const LOOKS = [
   { shirt: '#c8423a', pants: '#3a4a6a', hat: 'bucket', hatC: '#e8c84a', skin: '#f1c9a5' },
@@ -35,20 +73,26 @@ const LOOKS = [
   { shirt: '#e8962a', pants: '#2a3a4a', hat: 'hood', hatC: '#f2d23a', skin: '#f6d7bd' },
 ];
 export function makeHuman(look = 0, rodColor = '#c8a458') {
-  const L = LOOKS[look % 4], root = new THREE.Group(), body = new THREE.Group(); root.add(body);
-  const legL = new THREE.Group(), legR = new THREE.Group(); legL.position.set(-0.12, 0.85, 0); legR.position.set(0.12, 0.85, 0); body.add(legL, legR);
+  const L = LOOKS[look % 4], root = new THREE.Group(), tpl = ANGLERS[look % 4]; let body, legL, legR, armL, armR, head;
+  if (tpl) {      // Blender-model (public/models/anglerN.glb)
+    const t = tpl.clone(true); root.add(t); const g = n => t.getObjectByName(n);
+    body = g('body'); legL = g('legL'); legR = g('legR'); armL = g('armL'); armR = g('armR'); head = g('head');
+  } else {
+  body = new THREE.Group(); root.add(body);
+  legL = new THREE.Group(); legR = new THREE.Group(); legL.position.set(-0.12, 0.85, 0); legR.position.set(0.12, 0.85, 0); body.add(legL, legR);
   box(legL, L.pants, 0.2, 0.85, 0.22, 0, -0.42, 0); box(legR, L.pants, 0.2, 0.85, 0.22, 0, -0.42, 0);
   box(legL, '#3a2a20', 0.22, 0.12, 0.3, 0, -0.84, 0.04); box(legR, '#3a2a20', 0.22, 0.12, 0.3, 0, -0.84, 0.04);
   box(body, L.shirt, 0.5, 0.62, 0.3, 0, 1.17, 0);
-  const armL = new THREE.Group(), armR = new THREE.Group(); armL.position.set(-0.33, 1.42, 0); armR.position.set(0.33, 1.42, 0); body.add(armL, armR);
+  armL = new THREE.Group(); armR = new THREE.Group(); armL.position.set(-0.33, 1.42, 0); armR.position.set(0.33, 1.42, 0); body.add(armL, armR);
   box(armL, L.shirt, 0.14, 0.34, 0.15, 0, -0.15, 0); box(armL, L.skin, 0.12, 0.3, 0.13, 0, -0.45, 0);
   box(armR, L.shirt, 0.14, 0.34, 0.15, 0, -0.15, 0); box(armR, L.skin, 0.12, 0.3, 0.13, 0, -0.45, 0);
-  const head = new THREE.Group(); head.position.y = 1.72; body.add(head);
+  head = new THREE.Group(); head.position.y = 1.72; body.add(head);
   sph(head, L.skin, 0.32, 0.34, 0.32, 0, 0, 0); box(head, '#222', 0.05, 0.05, 0.02, -0.08, 0.02, 0.16); box(head, '#222', 0.05, 0.05, 0.02, 0.08, 0.02, 0.16);
   if (L.hat === 'bucket') { cyl(head, L.hatC, 0.2, 0.16, 0.2, 0, 0.17, 0); cyl(head, L.hatC, 0.3, 0.03, 0.3, 0, 0.1, 0); }
   else if (L.hat === 'cap') { sph(head, L.hatC, 0.34, 0.26, 0.34, 0, 0.08, 0); box(head, L.hatC, 0.3, 0.03, 0.2, 0, 0.05, 0.22); }
   else if (L.hat === 'straw') { cyl(head, L.hatC, 0.19, 0.14, 0.19, 0, 0.18, 0); cyl(head, L.hatC, 0.42, 0.025, 0.42, 0, 0.1, 0); }
   else { sph(head, L.hatC, 0.4, 0.4, 0.4, 0, 0.02, -0.02); box(head, L.skin, 0.2, 0.2, 0.05, 0, 0, 0.16); }
+  }
   // hengel
   const rod = new THREE.Group(); rod.position.set(0.34, 0.98, 0.1); body.add(rod);
   const shaft = cyl(rod, rodColor, 0.018, 2.5, 0.018, 0, 1.2, 0); box(rod, '#333', 0.07, 0.07, 0.2, 0, 0.1, 0);

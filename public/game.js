@@ -622,6 +622,7 @@ function frame() {
 /* ------------------------------------------------------------------ start */
 (async function boot() {
   try { initThree(); } catch (e) { $('boot').innerHTML = '<div>Dit apparaat kan geen 3D tonen (WebGL).</div><div class="note">' + e.message + '</div>'; console.error(e); return; }
+  try { await M.loadAnglers(new URL('./models/', import.meta.url).href); } catch (e) { console.warn('modellen', e); }
   frame(); connect(); setTimeout(() => { if (!G.ws || G.ws.readyState !== 1) { $('bootmsg').textContent = 'Verbinden...'; } }, 1500);
   window.__vv = { G, me, S, world: () => world, send, scene: () => scene, camera: () => camera };
 })();
