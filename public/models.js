@@ -29,7 +29,7 @@ export function label(text, color = '#ffffff', size = 28) {
 
 /* ------------------------------------------------------------------ Blender-modellen (.glb) */
 // Kleine eigen .glb-lader (alleen wat Blender hier exporteert: meshes, kleuren, node-hiërarchie).
-export const ANGLERS = [null, null, null, null];
+export const ANGLERS = [null, null, null, null], DOGS = [null, null, null, null];
 function parseGLB(buf) {
   const dv = new DataView(buf); if (dv.getUint32(0, true) !== 0x46546c67) throw new Error('geen glb');
   let off = 12, json = null, bin = null;
@@ -61,8 +61,9 @@ function parseGLB(buf) {
   return out;
 }
 export async function loadAnglers(base = 'models/') {
-  await Promise.all([0, 1, 2, 3].map(async i => { try { const r = await fetch(`${base}angler${i}.glb`); if (!r.ok) return; ANGLERS[i] = parseGLB(await r.arrayBuffer()); } catch (e) { console.warn('angler' + i, e.message); } }));
-  return ANGLERS.filter(Boolean).length;
+  const load = async (arr, name, i) => { try { const r = await fetch(`${base}${name}${i}.glb`); if (!r.ok) return; arr[i] = parseGLB(await r.arrayBuffer()); } catch (e) { console.warn(name + i, e.message); } };
+  await Promise.all([0, 1, 2, 3].flatMap(i => [load(ANGLERS, 'angler', i), load(DOGS, 'dog', i)]));
+  return ANGLERS.filter(Boolean).length + DOGS.filter(Boolean).length;
 }
 
 /* ------------------------------------------------------------------ visser */
@@ -163,6 +164,16 @@ export function makeFish(sp, glow) {
 /* ------------------------------------------------------------------ hond, reiger, eend */
 const DOG_COLS = ['#b8844a', '#e8d8b8', '#5a3a2a', '#8a8a8a'];
 export function makeDog(i = 0) {
+  const tpl = DOGS[i % 4];
+  if (tpl) {      // Blender-hond (public/models/dogN.glb, gemaakt met tools/make_dog.py)
+    const g = new THREE.Group(), t = tpl.clone(true); g.add(t); const n = k => t.getObjectByName(k);
+    const legs = [n('legFL'), n('legFR'), n('legBL'), n('legBR')], tail = n('tail'), head = n('head'), body = n('body');
+    if (legs.every(Boolean) && tail && head && body) {
+      g.userData = { legs, tail, head, body, t: Math.random() * 9 };
+      g.userData.update = (dt, speed) => { const u = g.userData; u.t += dt * (3 + speed * 3); const s = Math.sin(u.t * 2) * Math.min(1, speed / 2) * 0.8; legs[0].rotation.x = s; legs[3].rotation.x = s; legs[1].rotation.x = -s; legs[2].rotation.x = -s; tail.rotation.y = Math.sin(u.t * 3) * 0.6; body.position.y = Math.abs(Math.sin(u.t * 2)) * 0.03 * Math.min(1, speed); };
+      return g;
+    }
+  }
   const c = DOG_COLS[i % 4], g = new THREE.Group(), body = new THREE.Group(); g.add(body);
   box(body, c, 0.3, 0.3, 0.7, 0, 0.45, 0); const head = new THREE.Group(); head.position.set(0, 0.7, 0.4); body.add(head);
   box(head, c, 0.26, 0.24, 0.26, 0, 0, 0); box(head, '#2a1a1a', 0.1, 0.08, 0.1, 0, -0.03, 0.16); box(head, '#3a2a1a', 0.07, 0.18, 0.05, -0.15, -0.02, 0); box(head, '#3a2a1a', 0.07, 0.18, 0.05, 0.15, -0.02, 0);

@@ -3,3 +3,4 @@ data
 db.json
 *.log
 public/models/_export_log.txt
+public/models/_dog_log.txt
