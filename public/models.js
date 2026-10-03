@@ -104,6 +104,28 @@ function ironmanHuman(t) {
   // repulsors: gloeiende handpalmen
   for (const n of ['armL', 'armR']) { const a = gn(n); if (a) add(a, SPH, glow, 0.08, 0.08, 0.04, 0, -0.64, 0.11); }
 }
+/* ---- shader voor personen, honden en huizen: randlicht (rim) + zachte kleurbanden in het licht ---- */
+const SHADED = new WeakSet();
+export function shadeModel(root, rim = 0.32) {
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    for (const m of [].concat(o.material)) {
+      if (!m || SHADED.has(m) || !(m.isMeshLambertMaterial || m.isMeshStandardMaterial || m.isMeshPhongMaterial)) continue;
+      SHADED.add(m); const prev = m.onBeforeCompile;
+      m.onBeforeCompile = (sh, r) => {
+        prev && prev.call(m, sh, r);
+        sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `
+          { float lum = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+            vec3 band = floor(outgoingLight*4.0 + 0.5)/4.0; outgoingLight = mix(outgoingLight, band, 0.35);
+            float rimF = pow(1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0), 2.6);
+            outgoingLight += vec3(1.0, 0.96, 0.88) * rimF * ${rim.toFixed(2)} * (0.12 + lum); }
+          #include <opaque_fragment>`);
+      };
+      m.customProgramCacheKey = () => 'vvshade' + rim; m.needsUpdate = true;
+    }
+  });
+  return root;
+}
 export function makeHuman(look = 0, rodColor = '#c8a458', special = null) {
   const L = special === 'ironman' ? { ...LOOKS[look % 4], shirt: IRON_RED, pants: IRON_RED, skin: IRON_GOLD, hat: 'cap', hatC: IRON_GOLD } : LOOKS[look % 4], root = new THREE.Group(), tpl = ANGLERS[look % 4]; let body, legL, legR, armL, armR, head;
   if (tpl) {      // Blender-model (public/models/anglerN.glb)
@@ -133,6 +155,7 @@ export function makeHuman(look = 0, rodColor = '#c8a458', special = null) {
   rod.rotation.x = 0.9;
   const lab = label('', '#fff'); lab.position.y = 2.45; root.add(lab);
   const H = { root, body, legL, legR, armL, armR, head, rod, shaft, tip, lab, t: 0, labText: '', mode: 0 };
+  shadeModel(root);
   H.setName = (n, color) => { if (H.labText === n) return; H.labText = n; const nl = label(n, color || '#fff'); H.lab.material.map = nl.material.map; H.lab.material.needsUpdate = true; };
   H.setRod = c => { shaft.material = mat(c); };
   H.update = (dt, speed, mode, bend = 0) => {      // mode: 0 los, 1 vissen (hengel vooruit), 2 zittend (voertuig)
@@ -225,6 +248,7 @@ export function makeDog(i = 0, special = null) {
       u.tail.rotation.y = Math.sin(u.t * 1.5) * 0.25 * k + u.tail.rotation.y * (1 - k);
     } else if (u.head) u.head.rotation.x = 0;
   };
+  shadeModel(g, 0.38);
   return g;
 }
 function makeDogBase(i = 0, special = null) {
@@ -425,6 +449,7 @@ export function makeHouse(slot = 0) {
   cyl(basket, '#b8864a', 0.85, 0.3, 0.85, 0, 0.17, 0); cyl(basket, '#8a6030', 0.7, 0.32, 0.7, 0, 0.19, 0, { }); cyl(basket, '#c85a5a', 0.66, 0.12, 0.66, 0, 0.22, 0);
   const bdog = makeDog(0); bdog.scale.setScalar(0.85); bdog.position.set(0, 0.2, 0); bdog.userData.lying = true; bdog.userData.lieT = 1; bdog.userData.update(0, 0); bdog.rotation.y = 2.2; basket.add(bdog); bdog.visible = false;
   box(g, '#6a4a2a', 0.9, 0.5, 0.6, hw - 1.1, 0.25, hd - 0.8); box(g, '#d8d0b8', 0.5, 0.25, 0.4, hw - 1.1, 0.62, hd - 0.8);   // kastje met kist
+  shadeModel(g, 0.18);
   const H = { root: g, fishBox, bdog, basket, aq, plaque: null, fish: [], sig: '', t: Math.random() * 9 };
   H.setOwner = name => {
     const iron = String(name).toLowerCase() === 'toon';
