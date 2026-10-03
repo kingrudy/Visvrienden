@@ -434,12 +434,12 @@ export function makeHouse(slot = 0) {
   box(tank, '#e8d8a0', 3.05, 0.14, 0.78, 0, -0.5, 0);                         // zand
   // waterplantjes (wiegen mee) en een rond bloemetjesbosje
   const sway = [];
-  for (const [x, z, c, n, hh] of [[-1.38, -0.3, '#2f9a4a', 4, 0.8], [-0.78, -0.32, '#4cc06a', 3, 0.6], [0.35, -0.32, '#2f9a4a', 4, 0.75], [1.05, -0.3, '#6ad07a', 3, 0.55], [1.42, -0.28, '#3aa85a', 4, 0.85], [-1.45, 0.3, '#58c070', 3, 0.5]]) {
+  for (const [x, z, c, n, hh] of [[-1.38, -0.3, '#2f9a4a', 4, 0.8], [-0.15, -0.32, '#4cc06a', 3, 0.6], [0.35, -0.32, '#2f9a4a', 4, 0.75], [0.62, -0.3, '#6ad07a', 3, 0.55], [1.45, 0.28, '#3aa85a', 4, 0.85], [-1.45, 0.3, '#58c070', 3, 0.5]]) {
     const pl = new THREE.Group(); pl.position.set(x, -0.43, z); tank.add(pl);
     for (let i = 0; i < n; i++) { const bl = new THREE.Group(); bl.position.set((i - n / 2) * 0.05, 0, (i % 2) * 0.04); bl.rotation.z = (i - n / 2) * 0.12; pl.add(bl); box(bl, c, 0.045, hh * (0.7 + 0.1 * i), 0.012, 0, hh * (0.7 + 0.1 * i) / 2, 0); sph(bl, c, 0.07, 0.1, 0.03, 0, hh * (0.7 + 0.1 * i), 0); }
     sway.push(pl);
   }
-  for (const [x, z, c] of [[0.0, -0.33, '#ff7ab0'], [-0.3, -0.33, '#ffd24a'], [0.75, -0.33, '#b48cff']]) { const bush = new THREE.Group(); bush.position.set(x, -0.43, z); tank.add(bush); cyl(bush, '#2f8a4a', 0.02, 0.22, 0.02, 0, 0.11, 0); sph(bush, c, 0.14, 0.14, 0.14, 0, 0.26, 0); sph(bush, '#fff3a0', 0.05, 0.05, 0.05, 0, 0.3, 0.05); sway.push(bush); }
+  for (const [x, z, c] of [[0.0, 0.33, '#ff7ab0'], [-0.3, 0.33, '#ffd24a'], [0.75, 0.33, '#b48cff']]) { const bush = new THREE.Group(); bush.position.set(x, -0.43, z); tank.add(bush); cyl(bush, '#2f8a4a', 0.02, 0.22, 0.02, 0, 0.11, 0); sph(bush, c, 0.14, 0.14, 0.14, 0, 0.26, 0); sph(bush, '#fff3a0', 0.05, 0.05, 0.05, 0, 0.3, 0.05); sway.push(bush); }
   // klein deco-treintje dat rondjes rijdt over een spoortje op het zand
   const train = new THREE.Group(); tank.add(train);
   const TX = 1.1, TZ = 0.17, trk = new THREE.Group(); tank.add(trk);
@@ -452,6 +452,24 @@ export function makeHouse(slot = 0) {
     return car;
   };
   const cars = [mkCar('#d83a3a', 'loco'), mkCar('#3a7ad8', 'wagon'), mkCar('#4ab85a', 'wagon')]; cars.forEach(c => c.scale.setScalar(1.7));
+  // station met poppetjes
+  const peg = (par, x, y, z, c, hat) => { const f = new THREE.Group(); f.position.set(x, y, z); par.add(f); cyl(f, c, 0.016, 0.05, 0.016, 0, 0.025, 0); sph(f, '#f2c9a0', 0.03, 0.03, 0.03, 0, 0.065, 0); if (hat) cyl(f, hat, 0.018, 0.014, 0.018, 0, 0.083, 0); return f; };
+  const st = new THREE.Group(); st.position.set(-0.72, -0.43, -0.34); tank.add(st);
+  box(st, '#b59a72', 0.62, 0.03, 0.12, 0, 0.015, 0);                                              // perron
+  box(st, '#c85a5a', 0.2, 0.15, 0.1, -0.22, 0.105, -0.01); box(st, '#8a3a3a', 0.24, 0.025, 0.13, -0.22, 0.19, -0.01);  // stationsgebouwtje + dak
+  box(st, '#fff3c0', 0.035, 0.05, 0.005, -0.22, 0.11, 0.045); sph(st, '#fff8e0', 0.05, 0.05, 0.012, -0.22, 0.165, 0.045);   // deur en klokje
+  for (const x of [-0.02, 0.28]) box(st, '#5a4a3a', 0.015, 0.14, 0.015, x, 0.1, 0.04);
+  box(st, '#3a7ad8', 0.34, 0.02, 0.1, 0.13, 0.18, 0.01);                                          // overkapping
+  box(st, '#fff', 0.05, 0.03, 0.005, 0.13, 0.215, 0.05);                                           // naambordje
+  const pegs = [[0.0, '#e8383d', '#222'], [0.07, '#3a7ad8', null], [0.14, '#ffd24a', '#c83a3a'], [0.2, '#4ab85a', null], [0.26, '#c070d8', '#2a2a2a'], [-0.05, '#ff8a3a', null]];
+  pegs.forEach(([x, c, h], i) => peg(st, x, 0.03, 0.01 + (i % 2) * 0.02, c, h));
+  // kasteel
+  const ca = new THREE.Group(); ca.position.set(1.0, -0.43, -0.28); tank.add(ca);
+  box(ca, '#bfb8a8', 0.36, 0.17, 0.16, 0, 0.085, 0); box(ca, '#4a3a2a', 0.07, 0.1, 0.01, 0, 0.05, 0.085);
+  for (let i = -3; i <= 3; i++) box(ca, '#bfb8a8', 0.03, 0.03, 0.03, i * 0.05, 0.19, 0.07);
+  for (const [x, z] of [[-0.2, -0.06], [0.2, -0.06], [-0.2, 0.07], [0.2, 0.07]]) { cyl(ca, '#a8a090', 0.045, 0.28, 0.045, x, 0.14, z); cone(ca, '#c8403a', 0.065, 0.13, 0.065, x, 0.34, z); }
+  box(ca, '#6a4a2a', 0.006, 0.12, 0.006, 0, 0.3, -0.04); box(ca, '#ffd24a', 0.07, 0.04, 0.004, 0.035, 0.34, -0.04);
+  box(ca, '#2a2a30', 0.03, 0.05, 0.005, -0.1, 0.11, 0.082); box(ca, '#2a2a30', 0.03, 0.05, 0.005, 0.1, 0.11, 0.082);
   sph(tank, '#8a8a8a', 0.4, 0.28, 0.3, -0.1, -0.4, 0.2); sph(tank, '#7a7a8a', 0.26, 0.2, 0.22, 0.6, -0.42, -0.1);
   for (const [x, z] of [[-1.58, -0.42], [1.58, -0.42], [-1.58, 0.42], [1.58, 0.42]]) box(aq, '#2a2a30', 0.06, 1.2, 0.06, x, 1.5, z);
   box(aq, '#2a2a30', 3.2, 0.06, 0.9, 0, 2.12, 0); box(aq, '#fff6d8', 2.8, 0.05, 0.5, 0, 2.08, 0, { emissive: '#fff2c0', emissiveIntensity: 0.9 });
