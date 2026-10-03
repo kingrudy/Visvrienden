@@ -105,7 +105,8 @@ function ironmanHuman(t) {
   for (const n of ['armL', 'armR']) { const a = gn(n); if (a) add(a, SPH, glow, 0.08, 0.08, 0.04, 0, -0.64, 0.11); }
 }
 /* ---- shader voor personen, honden en huizen: randlicht (rim) + zachte kleurbanden in het licht ---- */
-const SHADED = new WeakSet();
+const SHADED = new WeakSet(), SHADE_T = { value: 0 };
+if (typeof requestAnimationFrame === 'function') { const tick = t => { SHADE_T.value = t / 1000; requestAnimationFrame(tick); }; requestAnimationFrame(tick); }
 export function outlineFit(root, t = 0.022) {
   const list = []; root.traverse(o => { if (o.isMesh && !o.userData.isOutline && o.visible && !o.material.transparent && !o.material.isMeshBasicMaterial) list.push(o); });
   for (const m of list) {
@@ -122,12 +123,14 @@ export function shadeModel(root, rim = 0.32) {
       if (!m || SHADED.has(m) || !(m.isMeshLambertMaterial || m.isMeshStandardMaterial || m.isMeshPhongMaterial)) continue;
       SHADED.add(m); const prev = m.onBeforeCompile;
       m.onBeforeCompile = (sh, r) => {
-        prev && prev.call(m, sh, r);
-        sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `
+        prev && prev.call(m, sh, r); sh.uniforms.uST = SHADE_T;
+        sh.vertexShader = 'varying float vSY;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vSY = (modelMatrix*vec4(transformed,1.0)).y;');
+        sh.fragmentShader = 'uniform float uST; varying float vSY;\n' + sh.fragmentShader.replace('#include <opaque_fragment>', `
           { float lum = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
-            vec3 band = floor(outgoingLight*3.0 + 0.5)/3.0; outgoingLight = mix(outgoingLight, band, 0.6);
+            float bl = (floor(min(lum, 0.999)*3.0) + 0.5)/3.0; outgoingLight *= mix(1.0, clamp(bl/max(lum, 0.02), 0.6, 1.6), 0.6);
             float rimF = pow(1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0), 2.6);
-            outgoingLight += vec3(1.0, 0.96, 0.88) * rimF * ${rim.toFixed(2)} * (0.12 + lum); }
+            outgoingLight += vec3(0.75, 0.95, 1.0) * rimF * ${rim.toFixed(2)} * (0.25 + lum);
+            float sw = smoothstep(0.82, 1.0, sin(vSY*2.2 - uST*1.6)); outgoingLight += vec3(1.0, 0.95, 0.75) * sw * 0.16 * (0.3 + lum); }
           #include <opaque_fragment>`);
       };
       m.customProgramCacheKey = () => 'vvshade' + rim; m.needsUpdate = true;
@@ -164,7 +167,7 @@ export function makeHuman(look = 0, rodColor = '#c8a458', special = null) {
   rod.rotation.x = 0.9;
   const lab = label('', '#fff'); lab.position.y = 2.45; root.add(lab);
   const H = { root, body, legL, legR, armL, armR, head, rod, shaft, tip, lab, t: 0, labText: '', mode: 0 };
-  shadeModel(root, 0.7); outlineFit(root, 0.02);
+  shadeModel(root, 1.0); outlineFit(root, 0.02);
   H.setName = (n, color) => { if (H.labText === n) return; H.labText = n; const nl = label(n, color || '#fff'); H.lab.material.map = nl.material.map; H.lab.material.needsUpdate = true; };
   H.setRod = c => { shaft.material = mat(c); };
   H.update = (dt, speed, mode, bend = 0) => {      // mode: 0 los, 1 vissen (hengel vooruit), 2 zittend (voertuig)
@@ -257,7 +260,7 @@ export function makeDog(i = 0, special = null) {
       u.tail.rotation.y = Math.sin(u.t * 1.5) * 0.25 * k + u.tail.rotation.y * (1 - k);
     } else if (u.head) u.head.rotation.x = 0;
   };
-  shadeModel(g, 0.7); outlineFit(g, 0.018);
+  shadeModel(g, 1.0); outlineFit(g, 0.018);
   return g;
 }
 function makeDogBase(i = 0, special = null) {
