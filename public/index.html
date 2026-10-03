@@ -60,7 +60,7 @@ h1,h2,h3{margin:0}
 #feed .rare{color:#ffe08a}#feed .legend{color:#ffb938;font-weight:700}#feed .chat b{color:var(--acc2)}
 @keyframes fin{from{opacity:0;transform:translateX(-8px)}}
 #chatrow{position:absolute;left:70px;bottom:118px;width:min(380px,56vw)}#chatrow input{width:100%}
-#quests{position:absolute;right:10px;top:178px;width:210px;padding:8px 10px;font-size:12.5px}
+#quests{width:210px;padding:8px 10px;font-size:12.5px}
 #quests .q{margin:4px 0}#quests .q.done{opacity:.55;text-decoration:line-through}
 #hotbar{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:flex;gap:6px;padding:7px;align-items:stretch;max-width:98vw;overflow-x:auto}
 .slot{position:relative;min-width:54px;text-align:center;padding:5px 6px;border-radius:10px;border:2px solid transparent;background:rgba(255,255,255,.08);cursor:pointer;font-size:12px}
@@ -177,9 +177,8 @@ h1,h2,h3{margin:0}
       <button data-pn="map" title="Kaart (M)">🗺️</button><button data-pn="talents" title="Talenten (T)">⭐</button><button data-pn="players" title="Spelers en handel (H)">👥</button>
       <button data-pn="settings" title="Menu (Esc)">☰</button>
     </div>
-    <div id="tr"><canvas id="mini" width="300" height="300" style="width:150px;height:150px"></canvas><div id="contest" class="box hidden"></div></div>
-    <div id="quests" class="box"></div>
-    <div id="feed"></div>
+    <div id="tr"><canvas id="mini" width="300" height="300" style="width:150px;height:150px"></canvas><div id="contest" class="box hidden"></div><div id="quests" class="box"></div></div>
+        <div id="feed"></div>
     <div id="chatrow" class="hidden"><input id="chatin" maxlength="120" placeholder="Typ een bericht en druk Enter"></div>
     <div id="reticle"></div>
     <div id="status"></div>
