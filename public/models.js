@@ -396,7 +396,26 @@ export function makeHouse(slot = 0) {
   const tank = new THREE.Group(); tank.position.set(0, 1.5, 0); aq.add(tank);
   box(tank, '#3a9ac8', 3.1, 1.15, 0.8, 0, 0, 0, { transparent: true, opacity: 0.38, depthWrite: false });
   box(tank, '#e8d8a0', 3.05, 0.14, 0.78, 0, -0.5, 0);                         // zand
-  for (const [x, c] of [[-1.2, '#2f8a4a'], [-0.5, '#3aa05a'], [0.9, '#2f8a4a'], [1.3, '#3aa05a']]) cone(tank, c, 0.12, 0.7, 0.1, x, -0.2, (x * 7) % 0.3);
+  // waterplantjes (wiegen mee) en een rond bloemetjesbosje
+  const sway = [];
+  for (const [x, z, c, n, hh] of [[-1.38, -0.3, '#2f9a4a', 4, 0.8], [-0.78, -0.32, '#4cc06a', 3, 0.6], [0.35, -0.32, '#2f9a4a', 4, 0.75], [1.05, -0.3, '#6ad07a', 3, 0.55], [1.42, -0.28, '#3aa85a', 4, 0.85], [-1.45, 0.3, '#58c070', 3, 0.5]]) {
+    const pl = new THREE.Group(); pl.position.set(x, -0.43, z); tank.add(pl);
+    for (let i = 0; i < n; i++) { const bl = new THREE.Group(); bl.position.set((i - n / 2) * 0.05, 0, (i % 2) * 0.04); bl.rotation.z = (i - n / 2) * 0.12; pl.add(bl); box(bl, c, 0.045, hh * (0.7 + 0.1 * i), 0.012, 0, hh * (0.7 + 0.1 * i) / 2, 0); sph(bl, c, 0.07, 0.1, 0.03, 0, hh * (0.7 + 0.1 * i), 0); }
+    sway.push(pl);
+  }
+  for (const [x, z, c] of [[0.0, -0.33, '#ff7ab0'], [-0.3, -0.33, '#ffd24a'], [0.75, -0.33, '#b48cff']]) { const bush = new THREE.Group(); bush.position.set(x, -0.43, z); tank.add(bush); cyl(bush, '#2f8a4a', 0.02, 0.22, 0.02, 0, 0.11, 0); sph(bush, c, 0.14, 0.14, 0.14, 0, 0.26, 0); sph(bush, '#fff3a0', 0.05, 0.05, 0.05, 0, 0.3, 0.05); sway.push(bush); }
+  // klein deco-treintje dat rondjes rijdt over een spoortje op het zand
+  const train = new THREE.Group(); tank.add(train);
+  const TX = 1.1, TZ = 0.17, trk = new THREE.Group(); tank.add(trk);
+  for (let i = 0; i < 28; i++) { const a = i / 28 * Math.PI * 2; const sl = box(trk, '#6a4a2a', 0.1, 0.012, 0.035, Math.cos(a) * TX, -0.425, Math.sin(a) * TZ); sl.rotation.y = -Math.atan2(TZ * Math.cos(a), -TX * Math.sin(a)); }
+  const mkCar = (c, kind) => {
+    const car = new THREE.Group(); train.add(car);
+    box(car, '#2a2a30', 0.15, 0.025, 0.07, 0, 0.0, 0); for (const wx of [-0.05, 0.05]) for (const wz of [-0.035, 0.035]) cyl(car, '#1a1a1a', 0.03, 0.012, 0.03, wx, -0.005, wz).rotation.x = Math.PI / 2;
+    if (kind === 'loco') { box(car, c, 0.12, 0.07, 0.065, -0.02, 0.055, 0); box(car, '#ffcc33', 0.05, 0.05, 0.07, 0.05, 0.045, 0); cyl(car, '#222', 0.035, 0.07, 0.035, 0.07, 0.07, 0); cyl(car, '#f0f0f0', 0.025, 0.02, 0.025, 0.07, 0.115, 0); sph(car, '#ffffcc', 0.025, 0.025, 0.025, 0.095, 0.04, 0, { emissive: '#ffffaa', emissiveIntensity: 1 }); }
+    else { box(car, c, 0.13, 0.055, 0.065, 0, 0.045, 0); box(car, '#fff3c0', 0.09, 0.015, 0.05, 0, 0.078, 0); }
+    return car;
+  };
+  const cars = [mkCar('#d83a3a', 'loco'), mkCar('#3a7ad8', 'wagon'), mkCar('#4ab85a', 'wagon')]; cars.forEach(c => c.scale.setScalar(1.7));
   sph(tank, '#8a8a8a', 0.4, 0.28, 0.3, -0.1, -0.4, 0.2); sph(tank, '#7a7a8a', 0.26, 0.2, 0.22, 0.6, -0.42, -0.1);
   for (const [x, z] of [[-1.58, -0.42], [1.58, -0.42], [-1.58, 0.42], [1.58, 0.42]]) box(aq, '#2a2a30', 0.06, 1.2, 0.06, x, 1.5, z);
   box(aq, '#2a2a30', 3.2, 0.06, 0.9, 0, 2.12, 0); box(aq, '#fff6d8', 2.8, 0.05, 0.5, 0, 2.08, 0, { emissive: '#fff2c0', emissiveIntensity: 0.9 });
@@ -423,6 +442,8 @@ export function makeHouse(slot = 0) {
   };
   H.update = dt => {
     H.t += dt;
+    sway.forEach((pl, i) => { pl.rotation.z = Math.sin(H.t * 1.1 + i * 1.3) * 0.08; });
+    cars.forEach((car, i) => { const a = -H.t * 0.45 + i * 0.4; car.position.set(Math.cos(a) * TX, -0.41, Math.sin(a) * TZ); car.rotation.y = Math.atan2(TZ * Math.cos(a), TX * Math.sin(a)); });
     for (const f of H.fish) {
       const ph = f.ph + H.t * f.sp, x = Math.sin(ph) * 1.3 * f.sx, dx = Math.cos(ph) * f.sp;
       f.m.position.set(x, f.y + Math.sin(ph * 2.3) * 0.07, f.z + Math.sin(ph * 1.3) * 0.08);

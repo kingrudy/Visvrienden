@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 300"><defs><linearGradient id="tx" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#8fe8e0"/></linearGradient></defs>
+<g transform="scale(.5) translate(10,40)"><defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b7f93"/><stop offset="1" stop-color="#0b3446"/></linearGradient>
+<radialGradient id="glow" cx=".5" cy=".42" r=".6"><stop offset="0" stop-color="#7ae8e0" stop-opacity=".55"/><stop offset="1" stop-color="#7ae8e0" stop-opacity="0"/></radialGradient></defs>
+<rect width="512" height="512" rx="112" fill="url(#bg)"/><rect width="512" height="512" rx="112" fill="url(#glow)"/>
+<circle cx="256" cy="262" r="176" fill="none" stroke="#ffffff" stroke-opacity=".28" stroke-width="10"/>
+<circle cx="256" cy="262" r="152" fill="none" stroke="#ffffff" stroke-opacity=".14" stroke-width="6" stroke-dasharray="4 18" stroke-linecap="round"/>
+<g transform="translate(256,262) scale(.98)"><g transform="translate(0,-100)"><g>
+<path d="M-62,0 L-118,-44 Q-98,0 -118,44 Z" fill="#ff6a2a" stroke="#12303a" stroke-width="7" stroke-linejoin="round"/>
+<path d="M-70,0 C-40,-62 50,-66 96,0 C50,66 -40,62 -70,0 Z" fill="#ff9a2a" stroke="#12303a" stroke-width="7" stroke-linejoin="round"/>
+<path d="M-20,-52 Q10,-82 38,-48 Z" fill="#ff6a2a" stroke="#12303a" stroke-width="6" stroke-linejoin="round"/>
+<path d="M-4,36 C20,52 52,44 72,18 C48,12 20,16 -4,36 Z" fill="#ffd24a" opacity=".9"/>
+<circle cx="62" cy="-10" r="11" fill="#fff" stroke="#12303a" stroke-width="5"/><circle cx="65" cy="-9" r="5" fill="#12303a"/>
+<path d="M80,14 Q90,20 98,12" fill="none" stroke="#12303a" stroke-width="5" stroke-linecap="round"/></g></g><g transform="rotate(180) translate(0,-100)"><g>
+<path d="M-62,0 L-118,-44 Q-98,0 -118,44 Z" fill="#2a8fd0" stroke="#12303a" stroke-width="7" stroke-linejoin="round"/>
+<path d="M-70,0 C-40,-62 50,-66 96,0 C50,66 -40,62 -70,0 Z" fill="#3fd0e8" stroke="#12303a" stroke-width="7" stroke-linejoin="round"/>
+<path d="M-20,-52 Q10,-82 38,-48 Z" fill="#2a8fd0" stroke="#12303a" stroke-width="6" stroke-linejoin="round"/>
+<path d="M-4,36 C20,52 52,44 72,18 C48,12 20,16 -4,36 Z" fill="#b6f4ff" opacity=".9"/>
+<circle cx="62" cy="-10" r="11" fill="#fff" stroke="#12303a" stroke-width="5"/><circle cx="65" cy="-9" r="5" fill="#12303a"/>
+<path d="M80,14 Q90,20 98,12" fill="none" stroke="#12303a" stroke-width="5" stroke-linecap="round"/></g></g></g>
+<g transform="translate(256,262)"><rect x="-4" y="-62" width="8" height="30" rx="4" fill="#ffd24a" stroke="#12303a" stroke-width="5"/><ellipse rx="26" ry="38" fill="#fff" stroke="#12303a" stroke-width="7"/><path d="M-25,-8 A26,38 0 0 1 25,-8 L24,-9 A26,38 0 0 0 -24,-9 Z" fill="#e8383d"/><path d="M-26,0 A26,38 0 0 1 26,0 Z" fill="#e8383d"/><line x1="-26" y1="0" x2="26" y2="0" stroke="#12303a" stroke-width="6"/><ellipse rx="26" ry="38" fill="none" stroke="#12303a" stroke-width="7"/><ellipse cx="-10" cy="-16" rx="5" ry="9" fill="#fff" opacity=".7"/></g>
+<path d="M256,198 L256,62 Q256,40 282,40 Q322,40 322,78" fill="none" stroke="#f2ead0" stroke-width="7" stroke-linecap="round"/>
+<path d="M322,78 L322,98 Q322,120 304,120 Q290,120 290,106" fill="none" stroke="#f2ead0" stroke-width="7" stroke-linecap="round"/></g>
+<text x="290" y="150" font-family="'Trebuchet MS','Segoe UI Rounded','Arial Rounded MT Bold',Verdana,sans-serif" font-weight="900" font-size="104" fill="url(#tx)" stroke="#0b3446" stroke-width="10" paint-order="stroke" stroke-linejoin="round" letter-spacing="2">Vis<tspan fill="#ffb938">vrienden</tspan></text>
+<text x="294" y="215" font-family="'Trebuchet MS',Verdana,sans-serif" font-weight="700" font-size="34" fill="#cfeef0" letter-spacing="9">SAMEN SPORTVISSEN</text></svg>

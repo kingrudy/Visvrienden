@@ -452,7 +452,7 @@ function updateHUD() {
 }
 function updateContest() {
   const c = G.contest, el = $('contest'); if (!c) { el.classList.add('hidden'); return; } el.classList.remove('hidden'); G.contestAt = performance.now();
-  const left = c.left; el.innerHTML = `<b>🏆 Wedstrijd ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}</b>${c.weekend ? ' <span class="tag">×2</span>' : ''}` + (c.top.length ? c.top.slice(0, 3).map((t, i) => `<div>${i + 1}. ${UI.esc(t.name)} · ${S.fmtKg(t.w)}</div>`).join('') : '<div class="note">Vang de zwaarste vis!</div>');
+  const left = Math.max(0, Math.ceil(c.left)); el.innerHTML = `<b>🏆 Wedstrijd ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}</b>${c.weekend ? ' <span class="tag">×2</span>' : ''}` + (c.top.length ? c.top.slice(0, 3).map((t, i) => `<div>${i + 1}. ${UI.esc(t.name)} · ${S.fmtKg(t.w)}</div>`).join('') : '<div class="note">Vang de zwaarste vis!</div>');
 }
 function drawMini() {
   const cv = $('mini'), x = cv.getContext('2d'), R = cv.width / 2, scale = 0.75, step = world.grid.step, W = S.WORLD, φ = me.yaw, c = Math.cos(φ), s = Math.sin(φ);
