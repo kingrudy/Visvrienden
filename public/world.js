@@ -51,6 +51,50 @@ const TREE_GEO = {
 };
 const TREE_TINT = { pine: 0.18, snowpine: 0.05, oak: 0.2, birch: 0.15, palm: 0.15, dead: 0.1, moontree: 0.12, bush: 0.25, rock: 0.1, reed: 0.15 };
 
+/* ------------------------------------------------------------------ shaders: wind in bomen/riet, terrein-detail en lichtbundels op de bodem */
+const WIND = { uWT: { value: 0 }, uWA: { value: 1 } };
+function windify(mat) {
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uWT = WIND.uWT; sh.uniforms.uWA = WIND.uWA;
+    sh.vertexShader = 'uniform float uWT; uniform float uWA;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+        vec3 wpI = (instanceMatrix*vec4(transformed,1.0)).xyz;
+      #else
+        vec3 wpI = transformed;
+      #endif
+      float swH = max(transformed.y, 0.0);
+      float swP = wpI.x*0.21 + wpI.z*0.17;
+      transformed.x += (sin(uWT*1.5 + swP) + 0.45*sin(uWT*3.7 + swP*2.3))*0.013*swH*uWA;
+      transformed.z += (cos(uWT*1.2 + swP*1.3) + 0.3*sin(uWT*4.1 + swP))*0.010*swH*uWA;`);
+  };
+  return mat;
+}
+const POND_U = { value: PONDS.map(p => new THREE.Vector4(p.x, p.z, p.r, p.waterY)) };
+function terrainShade(mat) {
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uWT = WIND.uWT; sh.uniforms.uPonds = POND_U; sh.uniforms.uDay = TERRAIN_U.uDay;
+    sh.vertexShader = 'varying vec3 vWP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vWP = (modelMatrix*vec4(transformed,1.0)).xyz;');
+    sh.fragmentShader = 'uniform float uWT, uDay; uniform vec4 uPonds[' + PONDS.length + ']; varying vec3 vWP;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      { float n = sin(vWP.x*1.7)*sin(vWP.z*1.3) + 0.6*sin(vWP.x*4.1+vWP.z*3.3) + 0.35*sin(vWP.x*9.3 - vWP.z*7.7);
+        diffuseColor.rgb *= 0.93 + 0.055*n;
+        for (int i = 0; i < ${PONDS.length}; i++) {
+          vec4 pd = uPonds[i]; float d = length(vWP.xz - pd.xy);
+          if (d < pd.z + 6.0) {
+            float dy = pd.w - vWP.y;
+            if (dy > -0.4) { float wet = smoothstep(-0.4, 0.0, dy)*0.35; diffuseColor.rgb *= 1.0 - wet; }
+            if (dy > 0.0) {
+              vec2 q = vWP.xz*0.9; float t = uWT*0.6;
+              float c1 = sin(q.x*2.1 + sin(q.y*1.7 + t)*1.6 + t), c2 = sin(q.y*2.3 + sin(q.x*1.9 - t)*1.6 - t);
+              float c = pow(1.0 - abs(c1*c2), 6.0); float fade = exp(-dy*0.5);
+              diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb*vec3(0.55,0.85,1.0), 0.45) + vec3(0.55,0.95,1.0)*c*0.35*fade*uDay;
+            }
+          }
+        }
+      }`);
+  };
+  return mat;
+}
+const TERRAIN_U = { uDay: { value: 1 } };
 /* ------------------------------------------------------------------ water */
 const WATER_VS = `uniform float uTime; uniform float uAmp; varying vec3 vW; varying vec3 vN;
 void main(){ vec4 wp = modelMatrix*vec4(position,1.0);
@@ -66,6 +110,7 @@ void main(){
   vec3 col = mix(uShallow, uDeep, 0.55); col = mix(col, uSky, fres*0.75);
   vec3 R = reflect(-normalize(uSun), N); float spec = pow(max(dot(R,V),0.0), 80.0);
   col += uSunCol*spec*1.4;
+  float gl = pow(max(sin(vW.x*7.0+uTime*2.3)*sin(vW.z*6.3-uTime*1.9),0.0),20.0)*pow(max(dot(R,V),0.0),5.0); col += uSunCol*gl*2.2;
   float d = length(uCam - vW); float f = smoothstep(uFogNear, uFogFar, d); col = mix(col, uFogCol, f);
   gl_FragColor = vec4(col, mix(uOpacity-0.1, 0.95, fres));
   #include <colorspace_fragment>
@@ -117,7 +162,7 @@ export class World {
     const idx = new Uint32Array((nx - 1) * (nz - 1) * 6); let q = 0;
     for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) { const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1; idx[q++] = a; idx[q++] = c; idx[q++] = b; idx[q++] = b; idx[q++] = c; idx[q++] = d; }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setIndex(new THREE.BufferAttribute(idx, 1)); g.computeVertexNormals();
-    this.terrain = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true })); this.scene.add(this.terrain);
+    this.terrain = new THREE.Mesh(g, terrainShade(new THREE.MeshLambertMaterial({ vertexColors: true }))); this.scene.add(this.terrain);
     this.colors = col; this.heights = hs;
   }
   terrainColor(x, z, h, out, tmp) {
@@ -231,7 +276,7 @@ export class World {
     this.treeCount = 0; this.treeGrid = new Map();
     for (const [type, list] of Object.entries(buckets)) { if (type === 'bush' || type === 'rock' || type === 'reed') continue; for (const [x, , z, sc] of list) { const k = Math.floor(x / 16) + ',' + Math.floor(z / 16); (this.treeGrid.get(k) || this.treeGrid.set(k, []).get(k)).push([x, z, sc]); } }
     for (const [type, list] of Object.entries(buckets)) {
-      const geo = TREE_GEO[type](), im = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }), list.length), tint = TREE_TINT[type];
+      const geo = TREE_GEO[type](), im = new THREE.InstancedMesh(geo, type === 'rock' ? new THREE.MeshLambertMaterial({ vertexColors: true }) : windify(new THREE.MeshLambertMaterial({ vertexColors: true })), list.length), tint = TREE_TINT[type];
       list.forEach(([x, y, z, s, r], i) => {
         q.setFromEuler(e.set(0, r, 0)); mm.compose(new THREE.Vector3(x, y - 0.05, z), q, new THREE.Vector3(s, s * (0.9 + (r % 1) * 0.3), s)); im.setMatrixAt(i, mm);
         const v = 1 - tint + S.rand01(x * 7, z * 7, 8) * tint * 2; im.setColorAt(i, new THREE.Color(v, v, v));
@@ -346,6 +391,7 @@ export class World {
     this.fog.near += (fn - this.fog.near) * Math.min(1, dt); this.fog.far += (ff - this.fog.far) * Math.min(1, dt);
     this.scene.fog.near = this.fog.near; this.scene.fog.far = this.fog.far; this.scene.fog.color.copy(hor); this.scene.background = hor;
     // water
+    WIND.uWT.value = this.t; WIND.uWA.value = weather === 'storm' ? 3 : weather === 'rain' ? 1.6 : 1; TERRAIN_U.uDay.value = 0.25 + 0.75 * (dayW + duskW * 0.5);
     for (const w of this.waters) {
       const u = w.m.uniforms; u.uTime.value = this.t; u.uAmp.value = weather === 'storm' ? 3.2 : weather === 'rain' ? 1.6 : 1; u.uCam.value.copy(cam.position); u.uSun.value.copy(ld); u.uSunCol.value.copy(sunCol); u.uSky.value.copy(hor); u.uFogCol.value.copy(hor); u.uFogNear.value = this.fog.near; u.uFogFar.value = this.fog.far;
       const k = 0.25 + 0.75 * (dayW + duskW * 0.6 + nightW * 0.25); u.uShallow.value.copy(BIOME[w.p.biome].w1).multiplyScalar(k); u.uDeep.value.copy(BIOME[w.p.biome].w2).multiplyScalar(k);
