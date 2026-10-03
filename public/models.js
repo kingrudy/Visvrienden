@@ -106,6 +106,15 @@ function ironmanHuman(t) {
 }
 /* ---- shader voor personen, honden en huizen: randlicht (rim) + zachte kleurbanden in het licht ---- */
 const SHADED = new WeakSet();
+export function outlineFit(root, t = 0.022) {
+  const list = []; root.traverse(o => { if (o.isMesh && !o.userData.isOutline && o.visible && !o.material.transparent && !o.material.isMeshBasicMaterial) list.push(o); });
+  for (const m of list) {
+    const g = m.geometry; if (!g.boundingBox) g.computeBoundingBox(); const b = g.boundingBox, c = b.getCenter(new THREE.Vector3()), sz = b.getSize(new THREE.Vector3());
+    const ws = new THREE.Vector3(); m.getWorldScale(ws); const half = Math.max(0.02, Math.max(sz.x * ws.x, sz.y * ws.y, sz.z * ws.z) / 2);
+    const k = Math.min(1.5, 1 + t / half), ol = new THREE.Mesh(g, OUTLINE_MAT); ol.scale.setScalar(k); ol.position.copy(c).multiplyScalar(1 - k); ol.userData.isOutline = true; ol.raycast = () => { }; m.add(ol);
+  }
+  return root;
+}
 export function shadeModel(root, rim = 0.32) {
   root.traverse(o => {
     if (!o.isMesh) return;
@@ -116,7 +125,7 @@ export function shadeModel(root, rim = 0.32) {
         prev && prev.call(m, sh, r);
         sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `
           { float lum = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
-            vec3 band = floor(outgoingLight*4.0 + 0.5)/4.0; outgoingLight = mix(outgoingLight, band, 0.35);
+            vec3 band = floor(outgoingLight*3.0 + 0.5)/3.0; outgoingLight = mix(outgoingLight, band, 0.6);
             float rimF = pow(1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0), 2.6);
             outgoingLight += vec3(1.0, 0.96, 0.88) * rimF * ${rim.toFixed(2)} * (0.12 + lum); }
           #include <opaque_fragment>`);
@@ -155,7 +164,7 @@ export function makeHuman(look = 0, rodColor = '#c8a458', special = null) {
   rod.rotation.x = 0.9;
   const lab = label('', '#fff'); lab.position.y = 2.45; root.add(lab);
   const H = { root, body, legL, legR, armL, armR, head, rod, shaft, tip, lab, t: 0, labText: '', mode: 0 };
-  shadeModel(root);
+  shadeModel(root, 0.7); outlineFit(root, 0.02);
   H.setName = (n, color) => { if (H.labText === n) return; H.labText = n; const nl = label(n, color || '#fff'); H.lab.material.map = nl.material.map; H.lab.material.needsUpdate = true; };
   H.setRod = c => { shaft.material = mat(c); };
   H.update = (dt, speed, mode, bend = 0) => {      // mode: 0 los, 1 vissen (hengel vooruit), 2 zittend (voertuig)
@@ -248,7 +257,7 @@ export function makeDog(i = 0, special = null) {
       u.tail.rotation.y = Math.sin(u.t * 1.5) * 0.25 * k + u.tail.rotation.y * (1 - k);
     } else if (u.head) u.head.rotation.x = 0;
   };
-  shadeModel(g, 0.38);
+  shadeModel(g, 0.7); outlineFit(g, 0.018);
   return g;
 }
 function makeDogBase(i = 0, special = null) {
@@ -434,7 +443,7 @@ export function makeHouse(slot = 0) {
   for (let i = 0; i < 28; i++) { const a = i / 28 * Math.PI * 2; const sl = box(trk, '#6a4a2a', 0.1, 0.012, 0.035, Math.cos(a) * TX, -0.425, Math.sin(a) * TZ); sl.rotation.y = -Math.atan2(TZ * Math.cos(a), -TX * Math.sin(a)); }
   const mkCar = (c, kind) => {
     const car = new THREE.Group(); train.add(car);
-    box(car, '#2a2a30', 0.15, 0.025, 0.07, 0, 0.0, 0); for (const wx of [-0.05, 0.05]) for (const wz of [-0.035, 0.035]) cyl(car, '#1a1a1a', 0.03, 0.012, 0.03, wx, -0.005, wz).rotation.x = Math.PI / 2;
+    box(car, '#2a2a30', kind === 'loco' ? 0.19 : 0.15, 0.025, 0.07, 0, 0.0, 0); for (const wx of (kind === 'loco' ? [-0.07, 0, 0.07] : [-0.05, 0.05])) for (const wz of [-0.035, 0.035]) cyl(car, kind === 'loco' ? '#c8c8d0' : '#1a1a1a', 0.03, 0.012, 0.03, wx, -0.005, wz).rotation.x = Math.PI / 2;
     if (kind === 'loco') { box(car, c, 0.12, 0.07, 0.065, -0.02, 0.055, 0); box(car, '#ffcc33', 0.05, 0.05, 0.07, 0.05, 0.045, 0); cyl(car, '#222', 0.035, 0.07, 0.035, 0.07, 0.07, 0); cyl(car, '#f0f0f0', 0.025, 0.02, 0.025, 0.07, 0.115, 0); sph(car, '#ffffcc', 0.025, 0.025, 0.025, 0.095, 0.04, 0, { emissive: '#ffffaa', emissiveIntensity: 1 }); }
     else { box(car, c, 0.13, 0.055, 0.065, 0, 0.045, 0); box(car, '#fff3c0', 0.09, 0.015, 0.05, 0, 0.078, 0); }
     return car;
