@@ -3,26 +3,44 @@ export const GAME_NAME = 'Visvrienden';
 export const DAY_MS = 20 * 60 * 1000;
 
 /* ------------------------------------------------------------------ tijd */
-export const dayPhase = (now = Date.now()) => (now % DAY_MS) / DAY_MS;      // 0 = zonsopkomst (06:00)
-export const sunElev = p => Math.sin(p * Math.PI * 2) + 0.25;                // > 0.15 = dag, < -0.1 = nacht
-export const clockStr = p => { const h = (p * 24 + 6) % 24; return String(Math.floor(h)).padStart(2, '0') + ':' + String(Math.floor((h % 1) * 60)).padStart(2, '0'); };
-export function timeClass(p) { const e = sunElev(p); return e > 0.15 ? 'dag' : e < -0.1 ? 'nacht' : 'sch'; }
+export const dayPhase = (now = Date.now()) => (now % DAY_MS) / DAY_MS; // 0 = zonsopkomst (06:00)
+export const sunElev = p => Math.sin(p * Math.PI * 2) + 0.25; // > 0.15 = dag, < -0.1 = nacht
+export const clockStr = p => {
+  const h = (p * 24 + 6) % 24;
+  return String(Math.floor(h)).padStart(2, '0') + ':' + String(Math.floor((h % 1) * 60)).padStart(2, '0');
+};
+export function timeClass(p) {
+  const e = sunElev(p);
+  return e > 0.15 ? 'dag' : e < -0.1 ? 'nacht' : 'sch';
+}
 
 /* ------------------------------------------------------------------ ruis en terrein */
 function hash2(ix, iz, seed) {
-  let h = Math.imul(ix, 374761393) + Math.imul(iz, 668265263) + Math.imul(seed, 1442695041) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+  let h = (Math.imul(ix, 374761393) + Math.imul(iz, 668265263) + Math.imul(seed, 1442695041)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
   return (h >>> 0) / 4294967295;
 }
 export function vnoise(x, z, seed = 0) {
-  const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz;
-  const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
-  const a = hash2(ix, iz, seed), b = hash2(ix + 1, iz, seed), c = hash2(ix, iz + 1, seed), d = hash2(ix + 1, iz + 1, seed);
+  const ix = Math.floor(x),
+    iz = Math.floor(z),
+    fx = x - ix,
+    fz = z - iz;
+  const u = fx * fx * (3 - 2 * fx),
+    v = fz * fz * (3 - 2 * fz);
+  const a = hash2(ix, iz, seed),
+    b = hash2(ix + 1, iz, seed),
+    c = hash2(ix, iz + 1, seed),
+    d = hash2(ix + 1, iz + 1, seed);
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
-export const fbm = (x, z, seed = 0) => vnoise(x, z, seed) * 0.55 + vnoise(x * 2.1, z * 2.1, seed + 11) * 0.3 + vnoise(x * 4.3, z * 4.3, seed + 23) * 0.15;
+export const fbm = (x, z, seed = 0) =>
+  vnoise(x, z, seed) * 0.55 + vnoise(x * 2.1, z * 2.1, seed + 11) * 0.3 + vnoise(x * 4.3, z * 4.3, seed + 23) * 0.15;
 export const rand01 = (a, b = 0, c = 0) => hash2(Math.floor(a), Math.floor(b), c);
-const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const sm = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
 export { sm as smoothstep };
 
 export const WORLD = { minX: -540, maxX: 500, minZ: -880, maxZ: 360 };
@@ -31,65 +49,184 @@ export const SPAWN = { x: 0, z: 14 };
 /* ------------------------------------------------------------------ vijvers */
 export const PONDS = [
   { id: 0, name: 'Dorpsvijver', x: 0, z: -45, r: 34, baseY: 0, depth: 4.5, biome: 'meadow', fish: 14 },
-  { id: 1, name: 'Bosmeer', x: -190, z: -150, r: 44, baseY: 2, depth: 5, biome: 'forest', fish: 16, req: { from: 0, catches: 12, species: 4 } },
-  { id: 2, name: 'Moerasvijver', x: 150, z: -300, r: 42, baseY: -1, depth: 4, biome: 'swamp', fish: 16, req: { from: 1, catches: 16, species: 5 } },
-  { id: 3, name: 'Bergmeer', x: -60, z: -470, r: 46, baseY: 18, depth: 5.5, biome: 'mountain', peak: 34, fish: 16, req: { from: 2, catches: 20, species: 5 } },
-  { id: 4, name: 'IJsvijver', x: 180, z: -620, r: 40, baseY: 32, depth: 5, biome: 'snow', peak: 24, fish: 16, req: { from: 3, catches: 24, species: 6 } },
-  { id: 5, name: 'Tropische Lagune', x: -300, z: -700, r: 64, baseY: 0, depth: 7, biome: 'tropic', fish: 22, req: { from: 4, catches: 30, species: 6 } },
-  { id: 6, name: 'Verborgen Bronvijver', x: 260, z: 90, r: 20, baseY: 3, depth: 4, biome: 'spring', secret: true, fish: 8, hint: 'Een oude visser fluistert: "Ten oosten van het dorp, voorbij de heuvels, borrelt een bron die geen kaart kent..."' },
-  { id: 7, name: 'Maanvijver', x: -340, z: 170, r: 22, baseY: 1, depth: 4, biome: 'moon', secret: true, fish: 8, hint: 'Een gerucht: "Ver in het zuidwesten ligt een vijver waar \'s nachts de maan in de vissen schijnt..."' },
+  {
+    id: 1,
+    name: 'Bosmeer',
+    x: -190,
+    z: -150,
+    r: 44,
+    baseY: 2,
+    depth: 5,
+    biome: 'forest',
+    fish: 16,
+    req: { from: 0, catches: 12, species: 4 },
+  },
+  {
+    id: 2,
+    name: 'Moerasvijver',
+    x: 150,
+    z: -300,
+    r: 42,
+    baseY: -1,
+    depth: 4,
+    biome: 'swamp',
+    fish: 16,
+    req: { from: 1, catches: 16, species: 5 },
+  },
+  {
+    id: 3,
+    name: 'Bergmeer',
+    x: -60,
+    z: -470,
+    r: 46,
+    baseY: 18,
+    depth: 5.5,
+    biome: 'mountain',
+    peak: 34,
+    fish: 16,
+    req: { from: 2, catches: 20, species: 5 },
+  },
+  {
+    id: 4,
+    name: 'IJsvijver',
+    x: 180,
+    z: -620,
+    r: 40,
+    baseY: 32,
+    depth: 5,
+    biome: 'snow',
+    peak: 24,
+    fish: 16,
+    req: { from: 3, catches: 24, species: 6 },
+  },
+  {
+    id: 5,
+    name: 'Tropische Lagune',
+    x: -300,
+    z: -700,
+    r: 64,
+    baseY: 0,
+    depth: 7,
+    biome: 'tropic',
+    fish: 22,
+    req: { from: 4, catches: 30, species: 6 },
+  },
+  {
+    id: 6,
+    name: 'Verborgen Bronvijver',
+    x: 260,
+    z: 90,
+    r: 20,
+    baseY: 3,
+    depth: 4,
+    biome: 'spring',
+    secret: true,
+    fish: 8,
+    hint: 'Een oude visser fluistert: "Ten oosten van het dorp, voorbij de heuvels, borrelt een bron die geen kaart kent..."',
+  },
+  {
+    id: 7,
+    name: 'Maanvijver',
+    x: -340,
+    z: 170,
+    r: 22,
+    baseY: 1,
+    depth: 4,
+    biome: 'moon',
+    secret: true,
+    fish: 8,
+    hint: 'Een gerucht: "Ver in het zuidwesten ligt een vijver waar \'s nachts de maan in de vissen schijnt..."',
+  },
 ];
-for (const p of PONDS) { p.zr = p.r + 85; p.waterY = p.baseY - 0.9; }
+for (const p of PONDS) {
+  p.zr = p.r + 85;
+  p.waterY = p.baseY - 0.9;
+}
 export const ZONE_PONDS = PONDS.filter(p => p.req);
 
-export const shapeAt = (p, dx, dz) => { const th = Math.atan2(dz, dx); return 1 + 0.16 * Math.sin(3 * th + p.id * 1.7) + 0.09 * Math.sin(5 * th + p.id * 2.9); };
-const entryAngle = p => { if (!p.req) return Math.PI / 2; const q = PONDS[p.req.from]; return Math.atan2(q.z - p.z, q.x - p.x); };
+export const shapeAt = (p, dx, dz) => {
+  const th = Math.atan2(dz, dx);
+  return 1 + 0.16 * Math.sin(3 * th + p.id * 1.7) + 0.09 * Math.sin(5 * th + p.id * 2.9);
+};
+const entryAngle = p => {
+  if (!p.req) return Math.PI / 2;
+  const q = PONDS[p.req.from];
+  return Math.atan2(q.z - p.z, q.x - p.x);
+};
 for (const p of PONDS) p.entry = p.secret ? Math.atan2(SPAWN.z - p.z, SPAWN.x - p.x) : entryAngle(p);
 
 /* ------------------------------------------------------------------ huizen (elke speler heeft een huisje in het dorp) */
-export const HOUSE_W = 8, HOUSE_D = 7;           // plattegrond (x breed, z diep); voorkant = -z, kijkt naar de dorpsvijver
+export const HOUSE_W = 8,
+  HOUSE_D = 7; // plattegrond (x breed, z diep); voorkant = -z, kijkt naar de dorpsvijver
 export const HOUSE_SLOTS = (() => {
   const a = [];
   for (let r = 0; r < 2; r++) for (let c = -10; c <= 10; c++) a.push({ x: c * 14, z: 56 + r * 24, col: c, row: r });
   a.sort((p, q) => Math.hypot(p.x, p.z - 66) - Math.hypot(q.x, q.z - 66) || p.x - q.x);
-  a.forEach((h, i) => { h.i = i; h.fl = 0; });
+  a.forEach((h, i) => {
+    h.i = i;
+    h.fl = 0;
+  });
   return a;
 })();
 const HOUSE_BY_CELL = new Map(HOUSE_SLOTS.map(h => [h.col + ',' + h.row, h]));
-export function houseCell(x, z) {                // dichtstbijzijnde huisvak (of null)
-  const col = Math.round(x / 14), row = Math.round((z - 56) / 24);
+export function houseCell(x, z) {
+  // dichtstbijzijnde huisvak (of null)
+  const col = Math.round(x / 14),
+    row = Math.round((z - 56) / 24);
   return HOUSE_BY_CELL.get(col + ',' + row) || null;
 }
-export function houseNear(x, z, m = 4) { const h = houseCell(x, z); return !!h && Math.abs(x - h.x) < HOUSE_W / 2 + m && Math.abs(z - h.z) < HOUSE_D / 2 + m; }
+export function houseNear(x, z, m = 4) {
+  const h = houseCell(x, z);
+  return !!h && Math.abs(x - h.x) < HOUSE_W / 2 + m && Math.abs(z - h.z) < HOUSE_D / 2 + m;
+}
 // wanden: [x0,z0,x1,z1] relatief aan het huis, met een open deuropening (3,2 m) in de voorwand
-const HW = HOUSE_W / 2, HD = HOUSE_D / 2;
-const WALLS = [[-HW, HD - 0.3, HW, HD], [-HW, -HD, -HW + 0.3, HD], [HW - 0.3, -HD, HW, HD], [-HW, -HD, -1.6, -HD + 0.3], [1.6, -HD, HW, -HD + 0.3]];
+const HW = HOUSE_W / 2,
+  HD = HOUSE_D / 2;
+const WALLS = [
+  [-HW, HD - 0.3, HW, HD],
+  [-HW, -HD, -HW + 0.3, HD],
+  [HW - 0.3, -HD, HW, HD],
+  [-HW, -HD, -1.6, -HD + 0.3],
+  [1.6, -HD, HW, -HD + 0.3],
+];
 export function inHouseWall(x, z) {
-  const h = houseCell(x, z); if (!h) return false;
-  const lx = x - h.x, lz = z - h.z; if (Math.abs(lx) > HW + 0.4 || Math.abs(lz) > HD + 0.4) return false;
+  const h = houseCell(x, z);
+  if (!h) return false;
+  const lx = x - h.x,
+    lz = z - h.z;
+  if (Math.abs(lx) > HW + 0.4 || Math.abs(lz) > HD + 0.4) return false;
   for (const [a, b, c, d] of WALLS) if (lx > a - 0.35 && lx < c + 0.35 && lz > b - 0.35 && lz < d + 0.35) return true;
   return false;
 }
-function houseBlend(x, z) {                      // [gewicht, hoogte] van het vlakke terrein onder een huis
-  const h = houseCell(x, z); if (!h) return null;
-  const dx = Math.max(0, Math.abs(x - h.x) - HW - 1.2), dz = Math.max(0, Math.abs(z - h.z) - HD - 1.2), d = Math.hypot(dx, dz);
+function houseBlend(x, z) {
+  // [gewicht, hoogte] van het vlakke terrein onder een huis
+  const h = houseCell(x, z);
+  if (!h) return null;
+  const dx = Math.max(0, Math.abs(x - h.x) - HW - 1.2),
+    dz = Math.max(0, Math.abs(z - h.z) - HD - 1.2),
+    d = Math.hypot(dx, dz);
   if (d > 6) return null;
   if (!h.fl) h.fl = rawHeight(h.x, h.z) + 0.02;
   return [1 - sm(0, 6, d), h.fl];
 }
 export function heightAt(x, z) {
-  const hb = houseBlend(x, z), h = rawHeight(x, z);
+  const hb = houseBlend(x, z),
+    h = rawHeight(x, z);
   return hb ? h + (hb[1] - h) * hb[0] : h;
 }
 function rawHeight(x, z) {
   let h = (fbm(x * 0.006, z * 0.006, 1) - 0.5) * 14 + (fbm(x * 0.02, z * 0.02, 2) - 0.5) * 3;
   for (const p of PONDS) {
-    const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
+    const dx = x - p.x,
+      dz = z - p.z,
+      d = Math.hypot(dx, dz);
     if (d > p.zr * 2.4) continue;
     const w = sm(p.zr * 1.7, p.zr * 0.7, d);
     if (w > 0) h += (p.baseY + (fbm(x * 0.03, z * 0.03, 5 + p.id) - 0.5) * 1.4 - h) * w;
     if (p.peak) {
-      const ang = Math.atan2(dz, dx); let da = Math.abs(ang - p.entry); if (da > Math.PI) da = 2 * Math.PI - da;
+      const ang = Math.atan2(dz, dx);
+      let da = Math.abs(ang - p.entry);
+      if (da > Math.PI) da = 2 * Math.PI - da;
       const corridor = 1 - 0.92 * Math.exp(-(da * da) / 0.18);
       const ridge = 1 - Math.abs(2 * fbm(x * 0.012, z * 0.012, 40 + p.id) - 1);
       h += p.peak * (0.4 + ridge) * corridor * sm(p.r * 1.8, p.zr * 1.05, d) * sm(p.zr * 2.2, p.zr * 1.4, d);
@@ -100,9 +237,11 @@ function rawHeight(x, z) {
   return h;
 }
 const JETTY_H = 0.45;
-export function pondWater(x, z) {          // in welke vijver ligt dit punt onder water (los van steigers), of -1
+export function pondWater(x, z) {
+  // in welke vijver ligt dit punt onder water (los van steigers), of -1
   for (const p of PONDS) {
-    const dx = x - p.x, dz = z - p.z;
+    const dx = x - p.x,
+      dz = z - p.z;
     if (dx * dx + dz * dz > (p.r * 1.7) ** 2) continue;
     if (heightAt(x, z) < p.waterY) return p.id;
   }
@@ -110,25 +249,46 @@ export function pondWater(x, z) {          // in welke vijver ligt dit punt onde
 }
 
 /* ------------------------------------------------------------------ vaste objecten in de wereld */
-export function shorePoint(p, ang, margin = 4) {      // vanuit het midden naar buiten tot droog land, + marge
+export function shorePoint(p, ang, margin = 4) {
+  // vanuit het midden naar buiten tot droog land, + marge
   let d = p.r * 0.5;
-  for (; d < p.r * 3; d += 0.5) { const x = p.x + Math.cos(ang) * d, z = p.z + Math.sin(ang) * d; if (heightAt(x, z) > p.waterY + 0.35) break; }
+  for (; d < p.r * 3; d += 0.5) {
+    const x = p.x + Math.cos(ang) * d,
+      z = p.z + Math.sin(ang) * d;
+    if (heightAt(x, z) > p.waterY + 0.35) break;
+  }
   d += margin;
   return { x: p.x + Math.cos(ang) * d, z: p.z + Math.sin(ang) * d, d };
 }
-export const JETTIES = [], KIOSKS = [], CAMPFIRES = [], HERONS = [], GATES = [];
+export const JETTIES = [],
+  KIOSKS = [],
+  CAMPFIRES = [],
+  HERONS = [],
+  GATES = [];
 for (const p of PONDS) {
   // steiger
-  const ja = p.entry - 0.55, sp = shorePoint(p, ja, 1.5);
+  const ja = p.entry - 0.55,
+    sp = shorePoint(p, ja, 1.5);
   JETTIES.push({ pond: p.id, x: sp.x, z: sp.z, ang: ja + Math.PI, len: 11, w: 2.4 });
-  const ka = p.entry + 0.55, kp = shorePoint(p, ka, 7);
-  KIOSKS.push({ id: 'kiosk' + p.id, type: 'kiosk', pond: p.id, x: kp.x, z: kp.z, name: p.id === 0 ? 'Aasverkoper Joop' : 'Aaskiosk ' + p.name });
-  const ca = p.entry + 1.15, cp = shorePoint(p, ca, 8);
+  const ka = p.entry + 0.55,
+    kp = shorePoint(p, ka, 7);
+  KIOSKS.push({
+    id: 'kiosk' + p.id,
+    type: 'kiosk',
+    pond: p.id,
+    x: kp.x,
+    z: kp.z,
+    name: p.id === 0 ? 'Aasverkoper Joop' : 'Aaskiosk ' + p.name,
+  });
+  const ca = p.entry + 1.15,
+    cp = shorePoint(p, ca, 8);
   CAMPFIRES.push({ id: 'vuur' + p.id, pond: p.id, x: cp.x, z: cp.z });
-  const ha = p.entry + 2.4, hp = shorePoint(p, ha, 1.2);
+  const ha = p.entry + 2.4,
+    hp = shorePoint(p, ha, 1.2);
   HERONS.push({ pond: p.id, x: hp.x, z: hp.z });
   if (p.req) {
-    const q = PONDS[p.req.from], a = Math.atan2(q.z - p.z, q.x - p.x);
+    const q = PONDS[p.req.from],
+      a = Math.atan2(q.z - p.z, q.x - p.x);
     GATES.push({ pond: p.id, x: p.x + Math.cos(a) * p.zr, z: p.z + Math.sin(a) * p.zr, ang: a });
   }
 }
@@ -143,31 +303,63 @@ CAMPFIRES.push({ id: 'vuurdorp', pond: 0, x: 4, z: 26 });
 
 export function onJetty(x, z) {
   for (const j of JETTIES) {
-    const dx = x - j.x, dz = z - j.z, c = Math.cos(j.ang), s = Math.sin(j.ang);
-    const lx = dx * c + dz * s, lz = -dx * s + dz * c;
+    const dx = x - j.x,
+      dz = z - j.z,
+      c = Math.cos(j.ang),
+      s = Math.sin(j.ang);
+    const lx = dx * c + dz * s,
+      lz = -dx * s + dz * c;
     if (lx > -1 && lx < j.len && Math.abs(lz) < j.w / 2) return j;
   }
   return null;
 }
-export function groundY(x, z) { const j = onJetty(x, z); if (j) return PONDS[j.pond].waterY + JETTY_H; return heightAt(x, z); }
+export function groundY(x, z) {
+  const j = onJetty(x, z);
+  if (j) return PONDS[j.pond].waterY + JETTY_H;
+  return heightAt(x, z);
+}
 export function walkable(x, z, boat = false) {
   const w = pondWater(x, z);
   if (boat) return w >= 0 && !onJetty(x, z);
   if (inHouseWall(x, z)) return false;
   return w < 0 || !!onJetty(x, z);
 }
-export function nearestPond(x, z) { let b = 0, bd = 1e9; for (const p of PONDS) { const d = Math.hypot(x - p.x, z - p.z) - p.r; if (d < bd) { bd = d; b = p.id; } } return b; }
-export function zoneOf(x, z) { for (const p of PONDS) if (p.req && Math.hypot(x - p.x, z - p.z) < p.zr) return p.id; return -1; }
-export function findNear(x, z, test, maxR = 14) {   // dichtstbijzijnde punt dat 'test' doorstaat
+export function nearestPond(x, z) {
+  let b = 0,
+    bd = 1e9;
+  for (const p of PONDS) {
+    const d = Math.hypot(x - p.x, z - p.z) - p.r;
+    if (d < bd) {
+      bd = d;
+      b = p.id;
+    }
+  }
+  return b;
+}
+export function zoneOf(x, z) {
+  for (const p of PONDS) if (p.req && Math.hypot(x - p.x, z - p.z) < p.zr) return p.id;
+  return -1;
+}
+export function findNear(x, z, test, maxR = 14) {
+  // dichtstbijzijnde punt dat 'test' doorstaat
   if (test(x, z)) return { x, z };
-  for (let r = 1.5; r <= maxR; r += 1.5) for (let k = 0; k < 16; k++) { const a = k / 16 * Math.PI * 2, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r; if (test(px, pz)) return { x: px, z: pz }; }
+  for (let r = 1.5; r <= maxR; r += 1.5)
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2,
+        px = x + Math.cos(a) * r,
+        pz = z + Math.sin(a) * r;
+      if (test(px, pz)) return { x: px, z: pz };
+    }
   return null;
 }
 
 /* ------------------------------------------------------------------ vissoorten */
 export const RARITY = [
-  { n: 'Gewoon', c: '#b8c4cc', w: 100, m: 1 }, { n: 'Ongewoon', c: '#6fd36f', w: 40, m: 1.6 }, { n: 'Zeldzaam', c: '#5aa8ff', w: 14, m: 2.6 },
-  { n: 'Episch', c: '#c06bff', w: 5, m: 4.5 }, { n: 'Legendarisch', c: '#ffb938', w: 0, m: 10 },
+  { n: 'Gewoon', c: '#b8c4cc', w: 100, m: 1 },
+  { n: 'Ongewoon', c: '#6fd36f', w: 40, m: 1.6 },
+  { n: 'Zeldzaam', c: '#5aa8ff', w: 14, m: 2.6 },
+  { n: 'Episch', c: '#c06bff', w: 5, m: 4.5 },
+  { n: 'Legendarisch', c: '#ffb938', w: 0, m: 10 },
 ];
 // id|naam|vijver|zeldzaamheid|minkg|maxkg|prijs/kg|vorm|kleuren|aas|tijd|kracht|legendarisch-voorwaarde
 const RAW = `
@@ -225,10 +417,27 @@ sterrenbaars|Sterrenbaars|7|2|.4|2.5|45|slank|#2a2a6a,#ffe88a,#8a6ae8|glow,garna
 spookvis|Spookvis|7|3|1|6|70|paling|#a8b8d8,#f0f4ff,#6a7ab8|maan,glow|nacht|1.8
 maankoi|Maankoi|7|4|20|34|80|rond|#e8e8ff,#ffffff,#8a9ae8|maan|nacht|3.8|nacht
 `;
-export const SPECIES = RAW.trim().split('\n').map((ln, i) => {
-  const a = ln.split('|');
-  return { i, id: a[0], name: a[1], pond: +a[2], rar: +a[3], w: [+a[4], +a[5]], p: +a[6], shape: a[7], c: a[8].split(','), likes: a[9].split(','), t: a[10], str: +a[11], leg: !!a[12], cond: a[12] || null };
-});
+export const SPECIES = RAW.trim()
+  .split('\n')
+  .map((ln, i) => {
+    const a = ln.split('|');
+    return {
+      i,
+      id: a[0],
+      name: a[1],
+      pond: +a[2],
+      rar: +a[3],
+      w: [+a[4], +a[5]],
+      p: +a[6],
+      shape: a[7],
+      c: a[8].split(','),
+      likes: a[9].split(','),
+      t: a[10],
+      str: +a[11],
+      leg: !!a[12],
+      cond: a[12] || null,
+    };
+  });
 export const SP = Object.fromEntries(SPECIES.map(s => [s.id, s]));
 for (const s of SPECIES) if (s.leg) s.rar = 4;
 /* vis van de week: elke week (maandag) krijgt een zeldzame soort een bonus */
@@ -237,7 +446,8 @@ export function featuredSpecies(t = Date.now()) {
   const pool = SPECIES.filter(s => s.rar >= 2 && !s.leg && !PONDS[s.pond].secret);
   return pool[(weekNo(t) * 7 + 3) % pool.length];
 }
-export const FEATURED_PRICE = 1.5, FEATURED_BITE = 2.5;
+export const FEATURED_PRICE = 1.5,
+  FEATURED_BITE = 2.5;
 export const speciesOf = pond => SPECIES.filter(s => s.pond === pond);
 export const fishValue = (sp, w) => Math.max(2, Math.round(sp.p * w * RARITY[sp.rar].m * (sp.leg ? 1 : 1)));
 export const fmtKg = w => (w >= 10 ? w.toFixed(1) : w.toFixed(2)).replace('.', ',') + ' kg';
@@ -275,7 +485,13 @@ export const upgradeCost = (k, lvl) => Math.round(UPGRADES[k].base * Math.pow(1.
 export const MOUNTS = {
   bike: { name: 'Fiets', price: 220, speed: 2.0, icon: '🚲', desc: 'Twee keer zo snel onderweg.' },
   scooter: { name: 'Scooter', price: 1400, speed: 3.0, icon: '🛵', desc: 'Drie keer zo snel. Zo kom je overal.' },
-  boat: { name: 'Roeiboot', price: 480, speed: 1.0, icon: '🛶', desc: 'Roei het water op en vis midden op de vijver. Stap in en uit bij de oever (B).' },
+  boat: {
+    name: 'Roeiboot',
+    price: 480,
+    speed: 1.0,
+    icon: '🛶',
+    desc: 'Roei het water op en vis midden op de vijver. Stap in en uit bij de oever (B).',
+  },
 };
 export const DOG_PRICE = 120;
 export const TALENTS = {
@@ -350,10 +566,15 @@ export const CONTEST_COOLDOWN_MS = 8 * 60 * 1000;
 export const rodStats = save => {
   const rod = RODS[save.rods.active] || RODS[0];
   const dur = save.rods.dur[rod.id] ?? 100;
-  const up = save.upg, t = save.talents, now = Date.now(), b = k => (save.buffs[k] || 0) > now;
+  const up = save.upg,
+    t = save.talents,
+    now = Date.now(),
+    b = k => (save.buffs[k] || 0) > now;
   const lineBase = rod.line + up.line * 8 + (b('kracht') ? 10 : 0);
   return {
-    rod, dur, broken: dur <= 0,
+    rod,
+    dur,
+    broken: dur <= 0,
     cast: rod.cast,
     line: dur < 30 ? lineBase * 0.7 : lineBase,
     reel: rod.reel * (1 + up.reel * 0.08 + t.kracht * 0.05 + (b('kracht') ? 0.2 : 0)),
