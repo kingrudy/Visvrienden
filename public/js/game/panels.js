@@ -6,6 +6,8 @@ import * as A from '../audio.js';
 import { toast, updateHotbar } from './hud.js';
 import { api } from './net.js';
 import { startPhoto } from './photo.js';
+import { requestSocial, socialAction } from './social.js';
+import { installApp } from './pwa.js';
 import { $, G, R, me, send, store } from './state.js';
 
 /* ------------------------------------------------------------------ panelen */
@@ -18,7 +20,7 @@ const TITLES = {
   talents: '⭐ Talenten',
   ach: '🏅 Prestaties',
   map: '🗺️ Kaart',
-  players: '👥 Spelers en handel',
+  players: '👥 Spelers, vrienden en club',
   settings: '☰ Menu',
   board: '📌 Prikbord',
   help: '❓ Besturing',
@@ -32,6 +34,7 @@ export function openPanel(name, arg) {
   G.actHeld = false;
   $('panelTitle').textContent = TITLES[name] || '';
   $('panel').classList.remove('hidden');
+  if (name === 'players' || name === 'quests') requestSocial();
   renderPanel();
 }
 export function closePanel() {
@@ -46,7 +49,14 @@ export function renderPanel() {
     top = body.scrollTop;
   const others = [...G.players.values()]
     .filter(e => !e.isMe)
-    .map(e => ({ id: e.id, name: e.info.name, lvl: e.info.lvl, dog: e.info.dog, dist: Math.hypot(e.x - me.x, e.z - me.z) }));
+    .map(e => ({
+      id: e.id,
+      name: e.info.name,
+      lvl: e.info.lvl,
+      dog: e.info.dog,
+      club: e.info.club,
+      dist: Math.hypot(e.x - me.x, e.z - me.z),
+    }));
   switch (P.name) {
     case 'shop':
       body.innerHTML = UI.shopHTML(s, P.arg.shop, P.arg.tab, P.arg);
@@ -58,7 +68,7 @@ export function renderPanel() {
       body.innerHTML = UI.bookHTML(s);
       break;
     case 'quests':
-      body.innerHTML = UI.questsHTML(s);
+      body.innerHTML = UI.questsHTML(s, G.community);
       break;
     case 'talents':
       body.innerHTML = UI.talentsHTML(s);
@@ -68,11 +78,20 @@ export function renderPanel() {
       break;
     case 'aq': {
       const h = G.houses.get(P.arg.slot);
-      body.innerHTML = h ? UI.aqHTML(h.info) : '<div class="note">Dit huis is leeg.</div>';
+      body.innerHTML = h ? UI.aqHTML(h.info, s, h.info.n === G.name) : '<div class="note">Dit huis is leeg.</div>';
       break;
     }
     case 'players':
-      body.innerHTML = UI.playersHTML(s, { others, fid: P.arg.fid });
+      if (P.arg.fid) G.socialTab = 'Kamer';
+      if (!G.inGame && G.socialTab === 'Kamer') G.socialTab = 'Vrienden'; // in de lobby is er geen kamer
+      body.innerHTML = UI.playersHTML(s, {
+        others,
+        fid: P.arg.fid,
+        tab: G.socialTab,
+        social: G.social,
+        inGame: G.inGame,
+        roomId: G.roomId,
+      });
       break;
     case 'board':
       body.innerHTML = UI.boardHTML(s, { contest: G.contest, weekend: G.weekend });
@@ -84,7 +103,7 @@ export function renderPanel() {
         .catch(() => {});
       break;
     case 'settings':
-      body.innerHTML = UI.settingsHTML(G.settings);
+      body.innerHTML = UI.settingsHTML({ ...G.settings, canInstall: G.canInstall });
       break;
     case 'help':
       body.innerHTML = UI.helpHTML();
@@ -107,7 +126,14 @@ $('panelBody').addEventListener('click', e => {
   const d = el.dataset,
     P = G.panel;
   A.sfx.ui();
+  if (socialAction(d)) return;
   switch (d.act) {
+    case 'deco':
+      send({ t: 'deco', id: d.id, on: d.on === '1' });
+      break;
+    case 'install':
+      installApp();
+      break;
     case 'shoptab':
       P.arg.tab = d.v;
       renderPanel();

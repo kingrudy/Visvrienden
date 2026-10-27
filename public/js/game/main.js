@@ -6,7 +6,10 @@ import * as M from '../models/index.js';
 import * as UI from '../ui/html.js';
 import * as A from '../audio.js';
 import { updateAmbient, updateSounds } from './ambient.js';
-import { syncReel } from './fishing.js';
+import { cancelCharge, syncReel, updateCharge } from './fishing.js';
+import { onBoss, updateBoss } from './boss.js';
+import { updateHotspots } from './hotspots.js';
+import { initPwa } from './pwa.js';
 import { setHouse, updateHouses } from './houses.js';
 import { feed, setStatus, tickHud, updateContest, updateHUD, updateHotbar } from './hud.js';
 import { computeAim, updateCamera, updateMe } from './movement.js';
@@ -14,7 +17,7 @@ import { connect } from './net.js';
 import { closePanel, openPanel } from './panels.js';
 import { addPlayer, removePlayer, updatePlayers } from './players.js';
 import { updateFish } from './pondfish.js';
-import { initThree, renderFrame } from './scene.js';
+import { adaptResolution, initThree, renderFrame } from './scene.js';
 import { showScreen } from './screens.js';
 import { $, G, R, isTouch, me, nearPond, phase, send, store } from './state.js';
 import './input.js'; // koppelt toetsenbord, muis, touch en gamepad
@@ -33,8 +36,12 @@ export function startGame(m) {
     weekend: m.weekend,
     featured: m.featured,
   });
-  Object.assign(G, { fight: null, catchCard: null, actHeld: false, reelSent: false });
-  Object.assign(me, { x: S.SPAWN.x, z: S.SPAWN.z, mount: 'walk', fs: 0, yaw: Math.PI, pitch: -0.2 });
+  Object.assign(G, { fight: null, catchCard: null, actHeld: false, reelSent: false, roomId: m.room.id });
+  G.hot.clear();
+  cancelCharge();
+  const start = m.you || S.SPAWN; // na opnieuw verbinden: je oude plek
+  Object.assign(me, { x: start.x, z: start.z, mount: 'walk', fs: 0, yaw: Math.PI, pitch: -0.2 });
+  onBoss(m.boss);
   // vorige kamer opruimen
   for (const id of [...G.players.keys()]) removePlayer(id);
   for (const f of G.fish.values()) R.scene.remove(f.mesh);
@@ -68,6 +75,10 @@ export function startGame(m) {
 }
 export function leaveGameUI() {
   G.inGame = false;
+  G.roomId = 0;
+  G.boss = null;
+  cancelCharge();
+  $('bossBox').classList.add('hidden');
   closePanel();
   document.exitPointerLock?.();
   for (const id of [...G.players.keys()]) removePlayer(id);
@@ -82,6 +93,7 @@ function frame() {
   G.fps += (1 / Math.max(dt, 0.001) - G.fps) * 0.05;
   if (G.inGame && R.meE) {
     updateMe(dt);
+    updateCharge();
     syncReel();
     updatePlayers(dt);
     updateHouses(dt);
@@ -89,6 +101,8 @@ function frame() {
     computeAim();
     updateFish(dt);
     updateAmbient(dt);
+    updateHotspots(dt);
+    updateBoss(dt);
     const ph = phase(),
       p2 = PONDS[2],
       p4 = PONDS[4];
@@ -108,6 +122,7 @@ function frame() {
     R.camera.lookAt(0, 0, -45);
     R.world.update(dt, R.camera, phase(), 'clear', {});
   }
+  adaptResolution(dt, G.fps);
   renderFrame();
 }
 
@@ -126,6 +141,7 @@ function frame() {
     console.warn('modellen', e);
   }
   frame();
+  initPwa();
   connect();
   setTimeout(() => {
     if (!G.ws || G.ws.readyState !== 1) $('bootmsg').textContent = 'Verbinden...';

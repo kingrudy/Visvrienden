@@ -9,8 +9,11 @@ import { $, G, R, fx } from './state.js';
 /* ------------------------------------------------------------------ three.js opzetten */
 export function initThree() {
   const q = (G.quality = G.settings.q);
+  M.setLowQuality(q === 0);
   R.renderer = new THREE.WebGLRenderer({ canvas: $('cv'), antialias: q >= 2, powerPreference: 'high-performance' });
-  R.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, q === 0 ? 1 : q === 1 ? 1.5 : 2));
+  maxRatio = Math.min(devicePixelRatio || 1, q === 0 ? 1 : q === 1 ? 1.5 : 2);
+  ratio = maxRatio;
+  R.renderer.setPixelRatio(ratio);
   R.renderer.outputColorSpace = THREE.SRGBColorSpace;
   R.scene = new THREE.Scene();
   R.camera = new THREE.PerspectiveCamera(65, 1, 0.1, 1600);
@@ -46,6 +49,14 @@ export function initThree() {
       G.ducks.push(d);
     }
   }
+  // landingsplek bij het werpen
+  R.landMark = new THREE.Mesh(
+    new THREE.RingGeometry(0.35, 0.55, 28).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: '#7ae8a0', transparent: true, opacity: 0.85, depthWrite: false }),
+  );
+  R.landMark.visible = false;
+  R.landMark.renderOrder = 5;
+  R.scene.add(R.landMark);
   // rimpelingen
   const rg = new THREE.RingGeometry(0.4, 0.5, 24);
   rg.rotateX(-Math.PI / 2);
@@ -77,4 +88,30 @@ export function ripple(x, z, big, y) {
 }
 export function renderFrame() {
   R.renderer.render(R.scene, R.camera);
+}
+
+/* ------------------------------------------------------------------ automatische resolutie */
+// Haalt een apparaat het niet (onder ~28 beelden per seconde), dan tekenen we op een iets lagere resolutie.
+// Gaat het weer ruim goed, dan schuift de resolutie terug omhoog. Zo blijft het spel soepel op oudere telefoons.
+let maxRatio = 1,
+  ratio = 1,
+  slowT = 0,
+  fastT = 0;
+export function adaptResolution(dt, fps) {
+  if (fps < 28) {
+    slowT += dt;
+    fastT = 0;
+  } else if (fps > 52) {
+    fastT += dt;
+    slowT = 0;
+  } else slowT = fastT = 0;
+  let next = ratio;
+  if (slowT > 2 && ratio > 0.55) next = Math.max(0.55, ratio - 0.15);
+  if (fastT > 6 && ratio < maxRatio) next = Math.min(maxRatio, ratio + 0.1);
+  if (next !== ratio) {
+    ratio = next;
+    slowT = fastT = 0;
+    R.renderer.setPixelRatio(ratio);
+    R.renderer.setSize(innerWidth, innerHeight, false);
+  }
 }

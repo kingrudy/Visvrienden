@@ -7,7 +7,8 @@ import { G, R, angDiff, clamp } from './state.js';
 /* ------------------------------------------------------------------ vissen in de vijver */
 export function onFish(ponds) {
   const seen = new Set();
-  for (const [pid, hx, hz, list] of ponds) {
+  for (const [pid, hx, hz, list, spots] of ponds) {
+    G.hot.set(pid, spots || []);
     const hr = G.herons[pid];
     if (hr) {
       hr.userData.x = hx;

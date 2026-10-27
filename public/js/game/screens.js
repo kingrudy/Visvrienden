@@ -5,6 +5,7 @@ import * as UI from '../ui/html.js';
 import * as A from '../audio.js';
 import { api, connect } from './net.js';
 import { openPanel } from './panels.js';
+import { renderLobbySocial } from './social.js';
 import { $, BUILD, G, send, store } from './state.js';
 
 export function showScreen(name) {
@@ -111,6 +112,7 @@ export function refreshLobby() {
       return `<div class="lbrow" style="opacity:${open || got ? 1 : 0.5}"><span>${hid ? '🔮 ???' : (open ? '🌊 ' : '🔒 ') + UI.esc(p.name)}</span><span>${got}/${list.length}</span></div>`;
     }).join('');
   renderRooms();
+  renderLobbySocial();
   api('/api/leaderboard')
     .then(lb => {
       $('lb').innerHTML = lb.heaviest.length

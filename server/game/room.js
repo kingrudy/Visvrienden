@@ -15,6 +15,7 @@ const { PONDS, BAIT, BAITS, RODS, UPGRADES, ACHIEVEMENTS, QUEST_KINDS } = S;
 const MOUNT_CODE = { walk: 0, bike: 1, scooter: 2, boat: 3 };
 const MOUNT_SPEED = { walk: 9, bike: 11, scooter: 16, boat: 7 }; // maximale snelheid voor de anti-valsspeelcontrole
 const EMOTES = ['wave', 'laugh', 'thumb', 'fish'];
+const TECH_CODE = { dobber: 0, grond: 1, kunstaas: 2 }; // in de snapshot, zodat anderen je dobber of kunstaas goed zien
 
 export class Room {
   /**
@@ -375,7 +376,7 @@ export class Room {
       this.contestCdUntil = 0;
       this.startContest(P);
     }
-    if (m.boss) this.spawnBoss(m.boss === true ? null : m.boss | 0);
+    if ('boss' in m) this.spawnBoss(m.boss === true ? null : m.boss | 0);
     if (m.deco) for (const d of S.DECOR) s.deco[d.id] = true;
     if (m.deco) this.sendHouse(P);
     this.dirty(P);
@@ -493,6 +494,7 @@ export class Room {
           r1(P.bx),
           r1(P.bz),
           P.fight ? Math.round(P.fight.D) : 0,
+          P.fs ? TECH_CODE[P.tech] || 0 : 0,
         ]),
       });
     if (this.tick % 4 === 0) for (const P of this.players.values()) this.send(P, { t: 'f', ponds: this.fishNear(P) });

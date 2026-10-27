@@ -112,6 +112,11 @@ export const sfx = {
     tone(2093, 0.18, 'square', 0.1, 0, 0.07);
   },
   ui: () => tone(660, 0.06, 'triangle', 0.08),
+  // belletje op de hengel bij grondvissen
+  bell: () => {
+    for (let i = 0; i < 4; i++) tone(2400, 0.12, 'sine', 0.14, 0, i * 0.11);
+  },
+  bubble: () => tone(500 + Math.random() * 300, 0.08, 'sine', 0.04, 400),
   warn: () => {
     tone(300, 0.14, 'sawtooth', 0.12);
   },

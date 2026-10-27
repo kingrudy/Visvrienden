@@ -1,9 +1,11 @@
-// Het huis van een speler: aquarium met gevangen soorten, decor (plantjes, treintje, station, kasteel) en hondenmand.
+// Het huis van een speler: aquarium met gevangen soorten, decor (plantjes, treintje, station, kasteel), hondenmand
+// en de inrichting die je in de winkel koopt (setDeco).
 import * as THREE from 'three';
 import { makeDog } from './animals.js';
 import { box, cone, cyl, sph } from './core.js';
 import { makeFish } from './fish.js';
 import { shadeModel } from './shading.js';
+import { SP, fmtKg } from '../shared.js';
 
 /* ------------------------------------------------------------------ huis met aquarium en hondenmand */
 function plaque(text) {
@@ -251,7 +253,12 @@ export function makeHouse(slot = 0) {
       d.visible = vis;
       H.bdog = d;
     }
-    if (H.plaque) g.remove(H.plaque);
+    if (H.owner === name) return;
+    H.owner = name;
+    if (H.plaque) {
+      g.remove(H.plaque);
+      H.plaque.material.map.dispose();
+    }
     H.plaque = plaque(`Huis van ${name}`);
     H.plaque.position.set(0, 3.55, -hd - 0.02);
     H.plaque.rotation.y = Math.PI;
@@ -279,8 +286,22 @@ export function makeHouse(slot = 0) {
       });
     });
   };
+  /* ---------------- gekochte inrichting (zie DECOR in shared.js) */
+  H.deco = {};
+  H.setDeco = (ids = [], info = {}) => {
+    const want = new Set(ids);
+    for (const [id, o] of Object.entries(H.deco)) o.visible = want.has(id);
+    for (const id of want)
+      if (!H.deco[id] && DECO_BUILD[id])
+        H.deco[id] = DECO_BUILD[id](id === 'kist' || id === 'duiker' || id === 'wrak' || id === 'koraal' ? tank : g, hw, hd);
+    // trofeekast en schilderij tonen jouw prestaties
+    if (H.deco.kast) H.deco.kast.userData.set?.(info.tr | 0, info.best);
+    if (H.deco.schilderij) H.deco.schilderij.userData.set?.(info.best);
+    shadeModel(g, 0.18); // nieuwe meubels krijgen dezelfde shader als de rest van het huis
+  };
   H.update = dt => {
     H.t += dt;
+    for (const o of Object.values(H.deco)) if (o.visible) o.userData.tick?.(H.t, dt);
     sway.forEach((pl, i) => {
       pl.rotation.z = Math.sin(H.t * 1.1 + i * 1.3) * 0.08;
     });
@@ -300,3 +321,244 @@ export function makeHouse(slot = 0) {
   };
   return H;
 }
+
+/* ------------------------------------------------------------------ inrichting */
+const bubbleMat = new THREE.MeshBasicMaterial({ color: '#e8fbff', transparent: true, opacity: 0.6 });
+/** Bubbels die vanaf (x, y, z) in het aquarium omhoog gaan. */
+function bubbles(parent, x, y, z, n = 6) {
+  const list = [];
+  for (let i = 0; i < n; i++) {
+    const b = sph(parent, '#ffffff', 0.035, 0.035, 0.035, x, y, z);
+    b.material = bubbleMat;
+    list.push({ b, ph: i / n });
+  }
+  return t => {
+    for (const { b, ph } of list) {
+      const k = (t * 0.35 + ph) % 1;
+      b.position.set(x + Math.sin((k + ph) * 9) * 0.03, y + k * 0.95, z);
+      b.scale.setScalar(0.03 + k * 0.03);
+    }
+  };
+}
+function fishPainting(best) {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 192;
+  const x = c.getContext('2d'),
+    sp = best && SP[best[0]];
+  const gr = x.createLinearGradient(0, 0, 0, 192);
+  gr.addColorStop(0, '#9fd8f0');
+  gr.addColorStop(0.55, '#5fb0d0');
+  gr.addColorStop(1, '#2a6a8a');
+  x.fillStyle = gr;
+  x.fillRect(0, 0, 256, 192);
+  if (sp) {
+    const [c1, c2] = sp.c;
+    x.fillStyle = c1;
+    x.beginPath();
+    x.ellipse(118, 96, 70, 30, 0, 0, 7);
+    x.fill();
+    x.fillStyle = c2;
+    x.beginPath();
+    x.ellipse(118, 106, 52, 14, 0, 0, 7);
+    x.fill();
+    x.fillStyle = c1;
+    x.beginPath();
+    x.moveTo(186, 96);
+    x.lineTo(236, 66);
+    x.lineTo(236, 126);
+    x.fill();
+    x.fillStyle = '#fff';
+    x.beginPath();
+    x.arc(72, 88, 7, 0, 7);
+    x.fill();
+    x.fillStyle = '#123';
+    x.beginPath();
+    x.arc(70, 88, 3.5, 0, 7);
+    x.fill();
+  }
+  x.fillStyle = 'rgba(0,0,0,.45)';
+  x.fillRect(0, 150, 256, 42);
+  x.fillStyle = '#fff';
+  x.font = 'bold 18px system-ui,sans-serif';
+  x.textAlign = 'center';
+  x.fillText(sp ? `${sp.name} · ${fmtKg(best[1])}` : 'Nog geen vangst', 128, 177);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const DECO_BUILD = {
+  /* --- in het aquarium (coördinaten in het aquarium: bodem op y -0.43) */
+  kist(tank) {
+    const g = new THREE.Group();
+    g.position.set(0.38, -0.43, 0.27);
+    tank.add(g);
+    box(g, '#7a4a1a', 0.16, 0.08, 0.1, 0, 0.04, 0);
+    box(g, '#d8a838', 0.17, 0.015, 0.105, 0, 0.06, 0);
+    const lid = new THREE.Group();
+    lid.position.set(0, 0.08, -0.05);
+    g.add(lid);
+    box(lid, '#8a5a24', 0.16, 0.03, 0.1, 0, 0.015, 0.05);
+    sph(g, '#ffd84a', 0.1, 0.03, 0.06, 0, 0.08, 0, { emissive: '#ffcc33', emissiveIntensity: 0.5 });
+    const bub = bubbles(tank, 0.38, -0.33, 0.27);
+    g.userData.tick = t => {
+      lid.rotation.x = -Math.max(0, Math.sin(t * 0.8)) * 0.9;
+      bub(t);
+    };
+    return g;
+  },
+  duiker(tank) {
+    const g = new THREE.Group();
+    g.position.set(-0.85, -0.43, 0.27);
+    tank.add(g);
+    cyl(g, '#e8b030', 0.03, 0.09, 0.03, 0, 0.05, 0);
+    sph(g, '#c8a040', 0.07, 0.07, 0.07, 0, 0.13, 0);
+    sph(g, '#8fd8ff', 0.035, 0.035, 0.02, 0, 0.13, 0.03, { emissive: '#8fd8ff', emissiveIntensity: 0.4 });
+    box(g, '#6a6a70', 0.05, 0.06, 0.03, 0, 0.07, -0.03);
+    const bub = bubbles(tank, -0.85, -0.25, 0.27, 4);
+    g.userData.tick = t => {
+      g.position.y = -0.43 + Math.abs(Math.sin(t * 1.3)) * 0.02;
+      bub(t + 0.3);
+    };
+    return g;
+  },
+  wrak(tank) {
+    const g = new THREE.Group();
+    g.position.set(0.3, -0.43, 0.0);
+    g.rotation.set(0, 0.5, 0.25);
+    tank.add(g);
+    box(g, '#5a3a1a', 0.3, 0.06, 0.09, 0, 0.03, 0);
+    box(g, '#4a2a10', 0.08, 0.05, 0.09, 0.13, 0.06, 0);
+    box(g, '#6a4a2a', 0.012, 0.22, 0.012, -0.02, 0.15, 0);
+    box(g, '#2a2a2a', 0.09, 0.06, 0.004, 0.02, 0.2, 0.004);
+    sph(g, '#ffffff', 0.02, 0.02, 0.004, 0.02, 0.2, 0.008);
+    return g;
+  },
+  koraal(tank) {
+    const g = new THREE.Group();
+    g.position.set(-0.5, -0.43, 0.02);
+    tank.add(g);
+    for (const [x, z, c, h] of [
+      [0, 0, '#ff6a8a', 0.16],
+      [0.05, 0.03, '#ff9a4a', 0.12],
+      [-0.05, 0.02, '#c070ff', 0.14],
+    ]) {
+      cyl(g, c, 0.012, h, 0.012, x, h / 2, z);
+      sph(g, c, 0.035, 0.035, 0.035, x, h, z);
+      sph(g, c, 0.025, 0.025, 0.025, x + 0.025, h * 0.7, z);
+    }
+    return g;
+  },
+  /* --- in huis (coördinaten in het huis: vloer op y 0, voordeur aan de -z kant) */
+  bank(g, hw) {
+    const b = new THREE.Group();
+    b.position.set(-hw + 0.75, 0, -0.4);
+    g.add(b);
+    box(b, '#4a6aa0', 0.75, 0.42, 2.0, 0, 0.21, 0);
+    box(b, '#3a5a90', 0.2, 0.55, 2.0, -0.3, 0.55, 0);
+    for (const s of [-1, 1]) box(b, '#3a5a90', 0.75, 0.32, 0.18, 0, 0.5, s * 0.95);
+    for (const z of [-0.45, 0.45]) box(b, '#6a8ac0', 0.5, 0.1, 0.85, 0.05, 0.47, z);
+    box(b, '#e8c84a', 0.1, 0.3, 0.3, -0.12, 0.66, -0.5).rotation.x = 0.2; // kussen
+    return b;
+  },
+  lamp(g, hw, hd) {
+    const l = new THREE.Group();
+    l.position.set(-hw + 0.6, 0, -hd + 0.9);
+    g.add(l);
+    cyl(l, '#3a3a3a', 0.18, 0.04, 0.18, 0, 0.02, 0);
+    cyl(l, '#5a5a5a', 0.025, 1.5, 0.025, 0, 0.77, 0);
+    cone(l, '#fff3c8', 0.25, 0.32, 0.25, 0, 1.62, 0, { emissive: '#ffd890', emissiveIntensity: 0.9 });
+    return l;
+  },
+  plant(g, hw, hd) {
+    const p = new THREE.Group();
+    p.position.set(hw - 0.7, 0, -hd + 0.8);
+    g.add(p);
+    cyl(p, '#b0603a', 0.22, 0.4, 0.22, 0, 0.2, 0);
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2,
+        leaf = sph(p, i % 2 ? '#3a9a4a' : '#4ab05a', 0.18, 0.5, 0.08, Math.cos(a) * 0.15, 0.75, Math.sin(a) * 0.15);
+      leaf.rotation.set(Math.sin(a) * 0.5, -a, Math.cos(a) * 0.5);
+    }
+    p.userData.tick = t => (p.rotation.z = Math.sin(t * 0.7) * 0.02);
+    return p;
+  },
+  kast(g, hw) {
+    const k = new THREE.Group();
+    k.position.set(hw - 0.5, 0, -0.9);
+    g.add(k);
+    // open kast: achterwand, zijkanten, boven- en onderkant, planken en een glazen deur
+    box(k, '#6a4a2a', 0.06, 1.9, 1.4, 0.22, 0.95, 0);
+    for (const s of [-1, 1]) box(k, '#6a4a2a', 0.5, 1.9, 0.06, 0, 0.95, s * 0.67);
+    box(k, '#6a4a2a', 0.5, 0.08, 1.4, 0, 1.86, 0);
+    box(k, '#6a4a2a', 0.5, 0.2, 1.4, 0, 0.1, 0);
+    box(k, '#cfe8f0', 0.02, 1.6, 1.25, -0.25, 0.98, 0, { transparent: true, opacity: 0.18 });
+    for (const y of [0.55, 1.15]) box(k, '#8a6a3a', 0.45, 0.04, 1.3, 0, y, 0);
+    const cups = new THREE.Group();
+    k.add(cups);
+    k.userData.set = (n, best) => {
+      if (k.userData.sig === n + '|' + (best || []).join()) return;
+      k.userData.sig = n + '|' + (best || []).join();
+      cups.clear();
+      for (let i = 0; i < Math.min(6, Math.max(1, n)); i++) {
+        const c = new THREE.Group();
+        c.position.set(-0.05, 0.57 + (i >= 3 ? 0.6 : 0), -0.4 + (i % 3) * 0.4);
+        cups.add(c);
+        const gold = { emissive: '#aa7a10', emissiveIntensity: 0.4 },
+          col = n ? '#f2c230' : '#9a9a9a';
+        cyl(c, col, 0.06, 0.03, 0.06, 0, 0.015, 0, gold);
+        cyl(c, col, 0.02, 0.1, 0.02, 0, 0.08, 0, gold);
+        cyl(c, col, 0.08, 0.12, 0.08, 0, 0.19, 0, gold);
+      }
+      const sp = best && SP[best[0]];
+      if (sp) {
+        const f = makeFish(sp, null);
+        f.scale.setScalar(0.35);
+        f.position.set(-0.05, 1.45, 0);
+        f.rotation.y = Math.PI / 2;
+        cups.add(f);
+      }
+    };
+    return k;
+  },
+  schilderij(g, hw, hd) {
+    const s = new THREE.Group();
+    s.position.set(-hw + 1.3, 1.9, hd - 0.31);
+    g.add(s);
+    box(s, '#8a5a2a', 1.3, 1.0, 0.06, 0, 0, 0);
+    const pic = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 0.86), new THREE.MeshBasicMaterial());
+    pic.position.z = -0.035;
+    pic.rotation.y = Math.PI;
+    s.add(pic);
+    s.userData.set = best => {
+      const sig = (best || []).join();
+      if (s.userData.sig === sig) return;
+      s.userData.sig = sig;
+      pic.material.map?.dispose();
+      pic.material.map = fishPainting(best);
+      pic.material.needsUpdate = true;
+    };
+    return s;
+  },
+  haard(g, hw) {
+    const h = new THREE.Group();
+    h.position.set(hw - 0.45, 0, 1.6);
+    g.add(h);
+    box(h, '#8a7a6a', 0.6, 1.2, 1.4, 0, 0.6, 0);
+    box(h, '#2a1a10', 0.1, 0.6, 0.8, -0.27, 0.42, 0);
+    box(h, '#6a5a4a', 0.75, 0.1, 1.55, -0.05, 1.22, 0);
+    const fire = [];
+    for (const [z, c] of [
+      [-0.15, '#ff7a20'],
+      [0.1, '#ffb030'],
+      [0, '#ffe060'],
+    ])
+      fire.push(cone(h, c, 0.12, 0.35, 0.12, -0.3, 0.32, z, { emissive: c, emissiveIntensity: 1 }));
+    box(h, '#4a2a10', 0.12, 0.08, 0.6, -0.3, 0.16, 0);
+    h.userData.tick = t =>
+      fire.forEach((f, i) => {
+        f.scale.y = 0.3 + Math.abs(Math.sin(t * (6 + i * 2.3) + i)) * 0.15;
+      });
+    return h;
+  },
+};

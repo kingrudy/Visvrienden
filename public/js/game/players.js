@@ -8,6 +8,8 @@ import { updateDog } from './dog.js';
 import { ripple } from './scene.js';
 import { G, MOUNT_N, R, angDiff, clamp, me } from './state.js';
 
+const TECHS = ['dobber', 'grond', 'kunstaas']; // volgorde zoals de server ze in de snapshot zet
+
 /* ------------------------------------------------------------------ spelers */
 export function addPlayer(info) {
   let E = G.players.get(info.id);
@@ -51,7 +53,7 @@ export function addPlayer(info) {
     if (isMe) R.meE = E;
   }
   E.info = info; // uiterlijk verandert alleen in de lobby, dus het poppetje blijft hetzelfde
-  E.h.setName(info.name + (E.isMe ? '' : ` · ${info.lvl}`), E.isMe ? '#8ff0c0' : '#ffffff');
+  E.h.setName((info.club ? `[${info.club}] ` : '') + info.name + (E.isMe ? '' : ` · ${info.lvl}`), E.isMe ? '#8ff0c0' : '#ffffff');
   E.h.lab.visible = !E.isMe;
   E.h.setRod(RODS[info.rod]?.color || '#c8a458');
   if (info.dog && !E.dogM) {
@@ -86,7 +88,7 @@ export function chatBubble(id, text) {
 }
 export function onSnapshot(ps) {
   const seen = new Set();
-  for (const [id, x, z, ry, mt, fs, bx, bz, D] of ps) {
+  for (const [id, x, z, ry, mt, fs, bx, bz, D, tech] of ps) {
     seen.add(id);
     const E = G.players.get(id);
     if (!E) continue;
@@ -101,6 +103,7 @@ export function onSnapshot(ps) {
       if (E.isMe) onMyFishState(fs);
     }
     E.D = D;
+    E.tech = TECHS[tech | 0];
     E.mountN = mt;
     if (!E.isMe) {
       if (E.first) {
@@ -161,7 +164,9 @@ export function updatePlayers(dt) {
     }
     // bobber en lijn
     const vis = E.fs > 0;
-    E.bobber.visible = E.line.visible = vis;
+    E.line.visible = vis;
+    E.bobber.visible = vis && E.tech !== 'grond'; // grondvissen: geen dobber, de lijn gaat het water in
+    E.bobber.scale.setScalar(E.tech === 'kunstaas' ? 0.5 : 1);
     if (vis) {
       E.h.root.updateMatrixWorld(true);
       E.h.tip.getWorldPosition(tmp);
@@ -172,6 +177,8 @@ export function updatePlayers(dt) {
       let by = wy + 0.02 + Math.sin(R.world.t * 2.2 + E.id) * 0.015;
       if (E.fs === 2) by -= 0.12 + Math.abs(Math.sin(R.world.t * 18)) * 0.06;
       if (E.fs === 3) by += Math.sin(R.world.t * 25) * 0.02;
+      if (E.tech === 'grond') by = wy - 0.35;
+      else if (E.tech === 'kunstaas' && E.fs === 1) by = wy - 0.05 + Math.sin(R.world.t * 9) * 0.03;
       E.bobber.position.set(bx, by, bz);
       const pos = E.line.geometry.attributes.position,
         n = pos.count,

@@ -11,6 +11,9 @@ import { showOffer } from './interact.js';
 import { leaveGameUI, startGame } from './main.js';
 import { addPlayer, chatBubble, onSnapshot, removePlayer } from './players.js';
 import { onFish } from './pondfish.js';
+import { onBoss, onBossWin } from './boss.js';
+import { onCommunity, onInvite, onSocial, requestSocial, runAfterJoin } from './social.js';
+import { renderPanel } from './panels.js';
 import { renderRooms, showScreen, toastGlobal } from './screens.js';
 import { $, BUILD, G, R, me, send, store } from './state.js';
 
@@ -31,16 +34,20 @@ export function connect() {
     }
   };
   ws.onclose = () => {
-    if (G.ws === ws) {
-      G.ws = null;
-      if (!G.outdated) {
-        toastGlobal('Verbinding verbroken. Pagina herladen...');
-        if (G.inGame) leaveGameUI();
-        setTimeout(() => G.ws || connect(), 2500);
-      }
-    }
+    if (G.ws !== ws) return;
+    G.ws = null;
+    if (G.outdated) return;
+    // midden in het spel: de wereld blijft staan en we proberen stil opnieuw te verbinden
+    if (G.inGame) {
+      G.reconnecting = true;
+      G.fight = null;
+      $('reconnect').classList.remove('hidden');
+    } else toastGlobal('Verbinding verbroken. Opnieuw verbinden...');
+    retry = Math.min(retry + 1, 5);
+    setTimeout(() => G.ws || connect(), 600 * retry);
   };
 }
+let retry = 0;
 export async function api(path, body) {
   const r = await fetch(path, {
     method: body ? 'POST' : 'GET',
@@ -54,16 +61,39 @@ function onMsg(m) {
     case 'authfail':
       G.token = null;
       store.set('token', null);
+      G.reconnecting = false;
+      $('reconnect').classList.add('hidden');
+      if (G.inGame) leaveGameUI();
       showScreen('auth');
       break;
     case 'authed':
+      retry = 0;
       G.name = m.name;
       G.save = m.save;
       G.rooms = m.rooms;
+      if (m.community) G.community = m.community;
+      requestSocial();
+      if (G.reconnecting) {
+        // terug naar dezelfde kamer en plek, of anders naar de lobby
+        G.reconnecting = false;
+        if (m.resume) return send({ t: 'join', id: m.resume, resume: true });
+        $('reconnect').classList.add('hidden');
+        leaveGameUI();
+        toastGlobal('Je kamer bestaat niet meer. Kies een nieuwe.', 'warn');
+        return;
+      }
+      if (G.linkRoom) {
+        // via een uitnodigingslink binnengekomen: meteen die kamer in
+        send({ t: 'join', id: G.linkRoom, link: true });
+        G.linkRoom = 0;
+        history.replaceState(null, '', location.pathname);
+        return;
+      }
       showScreen('lobby');
       break;
     case 'outdated':
       G.outdated = true;
+      if (G.reconnecting) location.reload(); // na een update van de server: meteen de nieuwe versie laden
       break;
     case 'kicked':
       toastGlobal('Je bent ergens anders ingelogd.', 'warn');
@@ -78,6 +108,12 @@ function onMsg(m) {
     case 'left':
       G.save = m.save;
       G.rooms = m.rooms;
+      if (G.afterLeave) {
+        // overstappen naar een andere kamer (bijv. die van een vriend)
+        send(G.afterLeave);
+        G.afterLeave = null;
+        break;
+      }
       leaveGameUI();
       break;
     case 'save':
@@ -87,7 +123,27 @@ function onMsg(m) {
     case 'look':
       break;
     case 'joined':
+      $('reconnect').classList.add('hidden');
       startGame(m);
+      runAfterJoin();
+      break;
+    case 'social':
+      onSocial(m);
+      break;
+    case 'community':
+      onCommunity(m.c);
+      break;
+    case 'invite':
+      onInvite(m);
+      break;
+    case 'boss':
+      onBoss(m.b, m.spawn);
+      break;
+    case 'bossWin':
+      onBossWin(m);
+      break;
+    case 'hot':
+      G.hot.delete(m.pond); // nieuwe stekken komen met het volgende vissenbericht
       break;
     case 's':
       onSnapshot(m.ps);
@@ -106,6 +162,7 @@ function onMsg(m) {
       break;
     case 'house':
       setHouse(m.h);
+      if (G.panel?.name === 'aq') renderPanel();
       break;
     case 'emote': {
       const E = G.players.get(m.id);

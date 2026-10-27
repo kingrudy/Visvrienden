@@ -1,0 +1,17 @@
+{
+  "name": "Visvrienden",
+  "short_name": "Visvrienden",
+  "description": "Samen sportvissen met je vrienden",
+  "lang": "nl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c2a33",
+  "theme_color": "#0f3a46",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/logo-emblem.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

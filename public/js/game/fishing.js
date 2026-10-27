@@ -1,18 +1,24 @@
 // Vissen vanuit de speler: werpen, aanslaan, inhalen, de vangstkaart (houden/terugzetten) en de drilmeter.
 import * as S from '../shared.js';
-import { SP, SPECIES, RARITY, BAIT } from '../shared.js';
+import { PONDS, SP, SPECIES, RARITY, BAIT } from '../shared.js';
 import * as UI from '../ui/html.js';
 import * as A from '../audio.js';
 import { bigMsg, setStatus, toast } from './hud.js';
 import { takePhoto } from './photo.js';
-import { $, G, isTouch, me, send } from './state.js';
+import { $, G, R, isTouch, me, send } from './state.js';
 
+const WAIT_TEXT = {
+  dobber: 'Wachten op een beet...',
+  grond: '⚓ Aas ligt op de bodem... luister naar het belletje',
+  kunstaas: '🎯 Houd ingedrukt om het kunstaas binnen te draaien',
+};
 export function onMyFishState(fs) {
   const prev = me.fs;
   me.fs = fs;
   if (fs === 2 && prev !== 2) {
+    if (G.tech === 'grond') A.sfx.bell();
     A.sfx.bite();
-    setStatus('AANSLAAN!', 'bite', 4000);
+    setStatus(G.tech === 'grond' ? '🔔 AANSLAAN!' : 'AANSLAAN!', 'bite', 4000);
     G.shake = 0.15;
   }
   if (fs === 1 && prev === 0) {
@@ -27,8 +33,9 @@ export function onMyFishState(fs) {
     $('fightUI').classList.remove('hidden');
     setStatus('', '');
   }
-  if (fs === 1) setStatus('Wachten op een beet...', '', 0, true);
+  if (fs === 1) setStatus(WAIT_TEXT[G.tech] || WAIT_TEXT.dobber, '', 0, true);
 }
+export const waitText = () => WAIT_TEXT[G.tech] || WAIT_TEXT.dobber;
 /* ------------------------------------------------------------------ vissen: knoppen */
 export function actDown() {
   if (G.panel || G.photo || G.chatOpen) return;
@@ -39,19 +46,78 @@ export function actDown() {
     if (me.mount === 'bike' || me.mount === 'scooter') return toast('Stap eerst van je voertuig af (V).', 'warn');
     const bc = G.save.baits[G.save.bait] | 0;
     if (!bc) return toast(`Geen ${BAIT[G.save.bait].name.toLowerCase()} meer! Kies ander aas of koop nieuw in de winkel.`, 'warn');
-    if (!G.aim) return toast('Richt op het water (kijk wat meer omlaag).', 'warn');
-    send({ t: 'cast', x: +G.aim.x.toFixed(2), z: +G.aim.z.toFixed(2) });
-    A.sfx.cast();
+    G.charge = { t0: performance.now() }; // krachtbalk loopt tot je loslaat
+    $('castMeter').classList.remove('hidden');
   } else if (me.fs === 2) send({ t: 'hook' });
 }
 export function actUp() {
   G.actHeld = false;
+  if (G.charge) releaseCast();
+}
+
+/* ------------------------------------------------------------------ werpen met de krachtbalk */
+const castState = () => {
+  const held = (performance.now() - G.charge.t0) / 1000,
+    power = S.castPower(held),
+    E = R.meE,
+    rs = S.rodStats(G.save);
+  // de balk bepaalt hoe ver je voorbij de waterkant gooit: van vlak achter de kant tot de maximale werpafstand
+  const sx = Math.sin(me.yaw),
+    sz = Math.cos(me.yaw);
+  let edge = rs.cast;
+  for (let d = 1.5; d < rs.cast; d += 0.5)
+    if (S.pondWater(E.x + sx * d, E.z + sz * d) >= 0) {
+      edge = d;
+      break;
+    }
+  const near = Math.min(rs.cast, edge + 1),
+    dist = near + power * Math.max(0, rs.cast - near),
+    x = E.x + sx * dist,
+    z = E.z + sz * dist;
+  const pond = S.pondWater(x, z),
+    ok = pond >= 0 && !S.onJetty(x, z) && (!PONDS[pond].req || G.save.unlocked.includes(pond));
+  return { power, x, z, ok, perfect: power >= S.CAST_PERFECT[0] && power <= S.CAST_PERFECT[1] };
+};
+/** Elk beeld tijdens het laden: balk en landingsplek bijwerken. */
+export function updateCharge() {
+  const mark = R.landMark;
+  if (!G.charge || !R.meE) {
+    if (mark) mark.visible = false;
+    return;
+  }
+  if (G.panel || G.photo || me.fs) return cancelCharge();
+  const c = castState();
+  $('cmFill').style.width = c.power * 100 + '%';
+  const lab = $('cmLabel');
+  lab.textContent = c.perfect ? '✨ Perfect! Laat los!' : c.ok ? 'Laat los om te werpen' : 'Dat is geen water';
+  lab.className = 'cm-label' + (c.perfect ? ' perfect' : '');
+  mark.visible = true;
+  mark.position.set(c.x, c.ok ? PONDS[S.pondWater(c.x, c.z)].waterY + 0.08 : S.groundY(c.x, c.z) + 0.08, c.z);
+  mark.material.color.set(c.perfect ? '#ffd84a' : c.ok ? '#7ae8a0' : '#ff6a5a');
+}
+function releaseCast() {
+  const c = castState();
+  cancelCharge();
+  if (!c.ok) return toast('Je worp landde op de kant. Kijk naar het water en probeer opnieuw.', 'warn');
+  G.tech = S.techOf(G.save.bait);
+  send({ t: 'cast', x: +c.x.toFixed(2), z: +c.z.toFixed(2), perfect: c.perfect });
+  A.sfx.cast();
+  if (c.perfect) {
+    setStatus('✨ Perfecte worp!', 'bite', 1200);
+    A.sfx.coin();
+  }
+}
+export function cancelCharge() {
+  G.charge = null;
+  $('castMeter').classList.add('hidden');
+  if (R.landMark) R.landMark.visible = false;
 }
 export function cancelLine() {
   if (me.fs) send({ t: 'cancel' });
 }
 export function syncReel() {
-  const want = me.fs === 3 && (G.actHeld || G.keys.has('Space'));
+  const held = G.actHeld || G.keys.has('Space');
+  const want = held && (me.fs === 3 || (me.fs === 1 && G.tech === 'kunstaas')); // kunstaas: ook binnendraaien zonder vis
   if (want !== G.reelSent) {
     G.reelSent = want;
     send({ t: 'reel', on: want });
@@ -107,6 +173,7 @@ export function updateFightUI() {
   const f = G.fight;
   if (!f) return;
   const sp = SPECIES[f.fid];
+  $('dlabel').textContent = f.boss ? 'Kracht van de reuzenvis' : 'Afstand tot de vis';
   $('tbar').firstElementChild.style.width = Math.min(100, f.T) + '%';
   $('dbar').firstElementChild.style.width = 100 - f.D + '%';
   const msg = $('fightmsg');
@@ -119,7 +186,7 @@ export function updateFightUI() {
         : G.actHeld || G.keys.has('Space')
           ? 'Inhalen...'
           : 'Houd ingedrukt om in te halen';
-  $('fishinfo').textContent = RARITY[sp.rar].n;
+  $('fishinfo').textContent = f.boss ? `🐋 met ${f.boss.n} ${f.boss.n === 1 ? 'visser' : 'vissers'}` : RARITY[sp.rar].n;
   $('stam').textContent = 'Vermoeidheid ' + (100 - f.st) + '%';
   if (f.ph === 'run' && G.reelSent && f.T > 70) {
     G.shake = 0.06;

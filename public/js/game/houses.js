@@ -19,6 +19,7 @@ export function setHouse(info) {
   h.info = info;
   h.H.setOwner(info.n);
   h.H.setFish(info.sp.map(x => SP[x[0]]).filter(Boolean));
+  h.H.setDeco(info.deco, info);
   updateBasket(h);
 }
 export function houseOf(E) {

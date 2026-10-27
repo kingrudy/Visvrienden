@@ -592,7 +592,9 @@ h3 {
   background: rgba(0, 30, 20, 0.55);
 }
 #toasts {
-  position: absolute;
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
   left: 50%;
   top: 70px;
   transform: translateX(-50%);
@@ -911,5 +913,109 @@ h3 {
   #hotbar {
     bottom: 4px;
     transform: translateX(-50%) scale(0.85);
+  }
+}
+
+/* ---------------- krachtbalk bij het werpen */
+#castMeter {
+  position: absolute;
+  left: 50%;
+  bottom: 120px;
+  transform: translateX(-50%);
+  width: min(320px, 70vw);
+  text-align: center;
+  pointer-events: none;
+}
+#castMeter .cm-label {
+  font-weight: 800;
+  text-shadow: 0 2px 6px #000;
+  margin-bottom: 4px;
+}
+#castMeter .cm-label.perfect {
+  color: #ffd84a;
+}
+#castMeter .cm-bar {
+  position: relative;
+  height: 16px;
+  border-radius: 9px;
+  background: rgba(8, 32, 40, 0.75);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+}
+#castMeter .cm-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: linear-gradient(90deg, #3fd0c0, #7ae8a0);
+}
+#castMeter .cm-perfect {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 82%;
+  width: 12%;
+  background: rgba(255, 210, 60, 0.55);
+  z-index: 1;
+}
+/* ---------------- reuzenvis */
+#bossBox {
+  padding: 8px 12px;
+  font-size: 13px;
+  min-width: 190px;
+  border-color: #ffc94a;
+}
+#bossBox .pbar i {
+  background: linear-gradient(90deg, #ff6a5a, #ffc94a);
+}
+/* ---------------- uitnodiging en opnieuw verbinden */
+#invitePop {
+  position: fixed;
+  z-index: 35;
+  left: 50%;
+  top: 90px;
+  transform: translateX(-50%);
+  padding: 12px 16px;
+  text-align: center;
+  width: min(420px, 92vw);
+}
+#reconnect {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 10, 14, 0.45);
+}
+#reconnect .box {
+  padding: 18px 26px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#reconnect .spin {
+  font-size: 34px;
+  animation: spin 1.4s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.dot-on {
+  color: #6fe08a;
+}
+@media (max-width: 700px) {
+  #bossBox {
+    min-width: 0;
+    width: 170px;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  #castMeter {
+    bottom: 250px;
   }
 }

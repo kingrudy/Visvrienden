@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#0f3a46">
 <title>Visvrienden</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="icon" type="image/png" href="icon-192.png"><link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
 <link rel="stylesheet" href="/b/__BUILD__/css/style.css">
 </head>
 <body>
@@ -31,12 +32,17 @@
       <div class="row" style="margin-top:10px"><button id="btnQuick" class="pri">⚡ Snel spelen</button></div>
       <div class="sec"><span>Eigen kamer maken</span></div>
       <div class="row"><input id="newName" placeholder="Naam van je kamer" maxlength="24"><select id="newMax" style="flex:0 0 90px"><option>2</option><option>4</option><option selected>6</option><option>8</option></select><button id="btnCreate" style="flex:0 0 auto">Maak</button></div>
-      <div class="note" style="margin-top:8px">Tip: deel de kamernaam met je vrienden en kies samen dezelfde kamer.</div>
+      <div class="note" style="margin-top:8px">Tip: in het spel deel je met 👥 of het menu een uitnodigingslink, zodat vrienden direct in jouw kamer komen.</div>
+      <div class="sec"><span>🌍 Samen-opdracht</span><span class="note">met alle spelers</span></div>
+      <div id="lobCommunity" class="note">Laden...</div>
     </div>
     <div class="card">
       <div class="sec" style="margin-top:0"><span>Jouw visser</span></div>
       <div class="looks" id="looks"></div>
       <div class="row" style="margin-top:10px"><button data-pn="book">📖 Visboek</button><button data-pn="talents">⭐ Talenten</button><button data-pn="ach">🏅 Prestaties</button></div>
+      <div class="row" style="margin-top:6px"><button data-pn="players">👥 Vrienden en club</button><button id="btnInstall" class="hidden">📲 Installeer als app</button></div>
+      <div class="sec"><span>Vrienden online</span></div>
+      <div id="lobFriends" class="note">Laden...</div>
       <div class="sec"><span>Ranglijst</span><span class="note">zwaarste vis</span></div>
       <div id="lb" class="note">Laden...</div>
       <div class="sec"><span>Jouw wereldkaart</span></div>
@@ -58,10 +64,10 @@
     <canvas id="sonar" class="hidden" width="128" height="128"></canvas>
     <div id="menubar" class="pe">
       <button data-pn="bag" title="Tas (I)">🎒</button><button data-pn="book" title="Visboek (J)">📖</button><button data-pn="quests" title="Opdrachten (O)">📋</button>
-      <button data-pn="map" title="Kaart (M)">🗺️</button><button data-pn="talents" title="Talenten (T)">⭐</button><button data-pn="players" title="Spelers en handel (H)">👥</button>
+      <button data-pn="map" title="Kaart (M)">🗺️</button><button data-pn="talents" title="Talenten (T)">⭐</button><button data-pn="players" title="Spelers, vrienden en club (H)">👥</button>
       <button data-pn="settings" title="Menu (Esc)">☰</button>
     </div>
-    <div id="tr"><canvas id="mini" width="300" height="300" style="width:150px;height:150px"></canvas><div id="contest" class="box hidden"></div><div id="quests" class="box"></div></div>
+    <div id="tr"><canvas id="mini" width="300" height="300" style="width:150px;height:150px"></canvas><div id="contest" class="box hidden"></div><div id="bossBox" class="box hidden"></div><div id="quests" class="box"></div></div>
         <div id="feed"></div>
     <div id="chatrow" class="hidden"><input id="chatin" maxlength="120" placeholder="Typ een bericht en druk Enter"></div>
     <div id="reticle"></div>
@@ -70,11 +76,11 @@
     <div id="fightUI" class="box hidden">
       <div id="fightmsg"></div>
       <div class="lbl"><span>Spanning op de lijn</span><span id="fishinfo"></span></div><div class="meter" id="tbar"><i></i></div>
-      <div class="lbl"><span>Afstand tot de vis</span><span id="stam"></span></div><div class="meter" id="dbar"><i></i></div>
+      <div class="lbl"><span id="dlabel">Afstand tot de vis</span><span id="stam"></span></div><div class="meter" id="dbar"><i></i></div>
     </div>
+    <div id="castMeter" class="hidden"><div class="cm-label" id="cmLabel">Kracht</div><div class="cm-bar"><i class="cm-perfect"></i><i class="cm-fill" id="cmFill"></i></div></div>
     <div id="catchCard" class="box hidden"></div>
     <div id="offer" class="box hidden"></div>
-    <div id="toasts"></div>
     <div id="bigmsg" class="hidden"></div>
     <div id="hotbar" class="box pe"></div>
     <div id="touch" class="hidden">
@@ -93,6 +99,9 @@
   </div>
 </div>
 
+<div id="toasts"></div>
+<div id="invitePop" class="box hidden"></div>
+<div id="reconnect" class="hidden"><div class="box"><div class="spin">🎣</div><b>Verbinding herstellen...</b><div class="note">Je gaat zo verder waar je was.</div></div></div>
 <div id="panel" class="hidden"><div id="panelBox"><div id="panelHead"><h2 id="panelTitle"></h2><button id="panelClose">✖ Sluiten</button></div><div id="panelBody"></div></div></div>
 
 <script>window.__BUILD='__BUILD__';</script>

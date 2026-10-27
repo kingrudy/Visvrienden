@@ -69,6 +69,20 @@ export const G = {
   shake: 0,
   outdated: false,
   quality: 1,
+  // nieuw: werpen, technieken, stekken, reuzenvis, samen spelen, verbinding
+  charge: null, // krachtbalk: { t0 } zolang je de werpknop ingedrukt houdt
+  tech: 'dobber', // techniek van je huidige worp
+  hot: new Map(), // vijver -> [[x, z], ...] visstekken
+  boss: null, // reuzenvis (info van de server) of null
+  social: null, // vrienden, club, clubs en dagdoel (van de server)
+  community: null, // het gezamenlijke dagdoel
+  socialTab: 'Kamer',
+  roomId: 0,
+  afterLeave: null, // bericht om te sturen zodra je een kamer uit bent (overstappen naar een andere kamer)
+  afterJoin: null, // actie na het binnenkomen van een kamer (bijv. een huis bezoeken)
+  reconnecting: false,
+  linkRoom: +new URLSearchParams(location.search).get('kamer') || 0, // uitnodigingslink ?kamer=…
+  canInstall: false,
 };
 export const me = {
   x: S.SPAWN.x,

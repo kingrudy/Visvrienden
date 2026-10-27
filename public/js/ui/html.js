@@ -113,7 +113,7 @@ const fishRow = (f, extra = '') => {
 /* ---------------- winkel */
 export function shopTabs(shop) {
   return shop.type === 'main'
-    ? ['Aas', 'Hengels', 'Voertuigen', 'Hond', 'Verkopen']
+    ? ['Aas', 'Hengels', 'Voertuigen', 'Hond', 'Huis', 'Verkopen']
     : shop.type === 'smith'
       ? ['Upgrades', 'Repareren', 'Verkopen']
       : shop.type === 'travel'
@@ -145,6 +145,13 @@ export function shopHTML(save, shop, tab, ctx) {
       .join('');
   else if (tab === 'Hond')
     h += `<div class="item"><div class="ic">🐕</div><div class="mid"><b>Een trouwe hond</b><small>Loopt met je mee, graaft elke paar minuten wormen op en jaagt reigers weg die je vis willen stelen.</small></div>${save.dog ? `<span class="tag">${esc(save.dog.name)}</span>` : `<button data-act="buy" data-item="dog" class="price">${Math.round(S.DOG_PRICE * d)}</button>`}</div>`;
+  else if (tab === 'Huis')
+    h +=
+      `<div class="note" style="margin-bottom:6px">Maak je huis gezellig. Zet dingen neer of berg ze op bij je aquarium (E).</div>` +
+      S.DECOR.map(
+        D =>
+          `<div class="item"><div class="ic">${D.icon}</div><div class="mid"><b>${D.name}</b> <span class="note">${D.where === 'aq' ? 'aquarium' : 'huis'}</span><small>${D.desc}</small></div>${D.id in (save.deco || {}) ? '<span class="tag">van jou</span>' : `<button data-act="buy" data-item="deco:${D.id}" class="price">${Math.round(D.price * d)}</button>`}</div>`,
+      ).join('');
   else if (tab === 'Upgrades')
     h += Object.entries(UPGRADES)
       .map(([k, U]) => {
@@ -237,8 +244,9 @@ export function bookHTML(save) {
 }
 
 /* ---------------- opdrachten */
-export function questsHTML(save) {
-  let h = `<div class="sec"><span>📋 Dagelijkse opdrachten</span><span class="note">elke dag nieuwe</span></div>`;
+export function questsHTML(save, community) {
+  let h = `<div class="sec"><span>🌍 Samen-opdracht</span><span class="note">met alle spelers</span></div>` + communityHTML(community);
+  h += `<div class="sec"><span>📋 Dagelijkse opdrachten</span><span class="note">elke dag nieuwe</span></div>`;
   h += save.daily.q
     .map(
       q =>
@@ -278,20 +286,110 @@ export function achHTML(save) {
 }
 
 /* ---------------- spelers, handel, prikbord, ranglijst, instellingen, hulp */
+export const SOCIAL_TABS = ['Kamer', 'Vrienden', 'Club', 'Samen'];
+/** Paneel 👥: spelers in de kamer (ruilen), vrienden, visclub en het gezamenlijke dagdoel. */
 export function playersHTML(save, ctx) {
+  const tab = ctx.tab || 'Kamer',
+    so = ctx.social || {};
+  let h = `<div class="tabs">${SOCIAL_TABS.map(t => `<button class="${t === tab ? 'on' : ''}" data-act="socialtab" data-v="${t}">${t}</button>`).join('')}</div>`;
+  if (tab === 'Kamer') h += roomHTML(save, ctx);
+  else if (tab === 'Vrienden') h += friendsHTML(so, ctx);
+  else if (tab === 'Club') h += clubHTML(save, so);
+  else h += communityHTML(so.community, true);
+  return h;
+}
+const isFriend = (save, name) => (save.friends || []).some(n => n.toLowerCase() === name.toLowerCase());
+function roomHTML(save, ctx) {
   const list = ctx.others;
-  let h = `<div class="note">Spelers in deze kamer. Binnen 18 meter kun je vis ruilen of verkopen.</div>`;
+  let h = `<div class="item"><div class="ic">🔗</div><div class="mid"><b>Uitnodigingslink</b><small>Stuur deze link naar vrienden: ze komen meteen in jouw kamer.</small></div><button class="pri" data-act="shareLink">Delen</button></div>`;
+  h += `<div class="sec"><span>Spelers in deze kamer</span></div>`;
   h += list.length
     ? list
         .map(
           p =>
-            `<div class="item"><div class="mid"><b>${esc(p.name)}</b><small>niveau ${p.lvl} · ${Math.round(p.dist)} m weg${p.dog ? ' · 🐕 ' + esc(p.dog) : ''}</small></div></div>`,
+            `<div class="item"><div class="mid"><b>${p.club ? `<span class="tag">${esc(p.club)}</span> ` : ''}${esc(p.name)}</b><small>niveau ${p.lvl} · ${Math.round(p.dist)} m weg${p.dog ? ' · 🐕 ' + esc(p.dog) : ''}</small></div>${isFriend(save, p.name) ? '<span class="tag">vriend</span>' : `<button data-act="friendAdd" data-name="${esc(p.name)}">+ Vriend</button>`}</div>`,
         )
         .join('')
-    : '<div class="note" style="margin:10px 0">Je bent alleen. Nodig je vrienden uit: ze kiezen in de lobby dezelfde kamer.</div>';
+    : '<div class="note" style="margin:10px 0">Je bent alleen. Deel de uitnodigingslink hierboven!</div>';
   if (list.length && save.inv.length) {
-    h += `<div class="sec"><span>🤝 Vis aanbieden</span></div><div class="row"><select id="tradeTo">${list.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select><select id="tradeFish">${save.inv.map(f => `<option value="${f.id}" ${ctx.fid === f.id ? 'selected' : ''}>${esc(SP[f.sp].name)} ${kg(f.w)} (waarde ${S.fishValue(SP[f.sp], f.w)})</option>`).join('')}</select></div><div class="row" style="margin-top:8px"><input id="tradePrice" type="number" min="0" max="100000" value="0" placeholder="Prijs (0 = cadeau)"><button class="pri" data-act="offer">Aanbod sturen</button></div>`;
+    h += `<div class="sec"><span>🤝 Vis aanbieden</span><span class="note">binnen 18 meter</span></div><div class="row"><select id="tradeTo">${list.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select><select id="tradeFish">${save.inv.map(f => `<option value="${f.id}" ${ctx.fid === f.id ? 'selected' : ''}>${esc(SP[f.sp].name)} ${kg(f.w)} (waarde ${S.fishValue(SP[f.sp], f.w)})</option>`).join('')}</select></div><div class="row" style="margin-top:8px"><input id="tradePrice" type="number" min="0" max="100000" value="0" placeholder="Prijs (0 = cadeau)"><button class="pri" data-act="offer">Aanbod sturen</button></div>`;
   }
+  return h;
+}
+function friendsHTML(so, ctx) {
+  const fr = so.friends || [];
+  let h = `<div class="row" style="margin-bottom:8px"><input id="friendName" maxlength="16" placeholder="Naam van je vriend"><button class="pri" data-act="friendAddInput" style="flex:0 0 auto">Toevoegen</button></div>`;
+  if (!so.friends) return h + '<div class="note">Laden...</div>';
+  if (fr.length && ctx.inGame)
+    h += `<div class="row" style="margin-bottom:8px"><button data-act="inviteAll">📨 Alle online vrienden uitnodigen</button></div>`;
+  h += fr.length
+    ? fr
+        .map(f => {
+          const here = ctx.roomId && f.room?.id === ctx.roomId;
+          const where = !f.online ? 'offline' : f.room ? (here ? 'in jouw kamer' : `in ${esc(f.room.name)}`) : 'in de lobby';
+          const btns = [];
+          if (f.online && !here && ctx.inGame) btns.push(`<button data-act="invite" data-name="${esc(f.name)}">Uitnodigen</button>`);
+          if (f.online && f.room && !here) btns.push(`<button class="pri" data-act="gotoRoom" data-id="${f.room.id}">Meedoen</button>`);
+          if (ctx.inGame)
+            btns.push(`<button data-act="visit" data-name="${esc(f.name)}" title="Naar het huis van ${esc(f.name)}">🏠</button>`);
+          btns.push(`<button data-act="friendDel" data-name="${esc(f.name)}" title="Verwijderen">✕</button>`);
+          return `<div class="item"><div class="ic">${f.online ? '🟢' : '⚪'}</div><div class="mid"><b>${f.club ? `<span class="tag">${esc(f.club)}</span> ` : ''}${esc(f.name)}</b><small>niveau ${f.lvl} · ${where}${f.mutual ? '' : ' · heeft jou nog niet toegevoegd'}</small></div><div class="row" style="flex:0 0 auto;gap:4px">${btns.join('')}</div></div>`;
+        })
+        .join('')
+    : '<div class="note">Nog geen vrienden. Voeg iemand toe met zijn of haar gebruikersnaam, of via de knop "+ Vriend" bij spelers in je kamer.</div>';
+  return h;
+}
+function clubHTML(save, so) {
+  const c = so.club;
+  if (c) {
+    let h = `<div class="item"><div class="ic">🎏</div><div class="mid"><b><span class="tag">${esc(c.tag)}</span> ${esc(c.name)}</b><small>${c.members.length} leden · deze week ${c.weekKg} kg · totaal ${c.kg} kg en ${c.n} vissen · oprichter ${esc(c.owner)}</small></div><button data-act="clubLeave">Verlaten</button></div>`;
+    h += `<div class="sec"><span>Leden</span><span class="note">gevangen kg voor de club</span></div>`;
+    h += c.members
+      .map(
+        m =>
+          `<div class="lbrow"><span>${m.online ? '🟢' : '⚪'} ${esc(m.name)} <span class="note">niv. ${m.lvl}</span></span><span>${m.kg} kg</span></div>`,
+      )
+      .join('');
+    h += `<div class="sec"><span>🏆 Clubranglijst deze week</span></div>` + clubRanking(so.clubs);
+    return h;
+  }
+  let h = `<div class="note" style="margin-bottom:8px">In een visclub vang je samen kilo's voor de wekelijkse clubranglijst. Je clubafkorting staat bij je naam.</div>`;
+  h += `<div class="sec"><span>Club oprichten</span><span class="note">kost 🪙 200</span></div><div class="row"><input id="clubName" maxlength="20" placeholder="Clubnaam"><input id="clubTag" maxlength="4" placeholder="Afk." style="flex:0 0 70px;text-transform:uppercase"><button class="pri" data-act="clubCreate" style="flex:0 0 auto">Oprichten</button></div>`;
+  const list = so.clubs || [];
+  h += `<div class="sec"><span>Bestaande clubs</span></div>`;
+  h += list.length
+    ? list
+        .map(
+          c =>
+            `<div class="item"><div class="mid"><b><span class="tag">${esc(c.tag)}</span> ${esc(c.name)}</b><small>${c.members} leden · deze week ${c.weekKg} kg</small></div>${c.members >= 20 ? '<span class="tag">vol</span>' : `<button data-act="clubJoin" data-key="${esc(c.key)}">Lid worden</button>`}</div>`,
+        )
+        .join('')
+    : '<div class="note">Er zijn nog geen clubs. Richt de eerste op!</div>';
+  return h;
+}
+function clubRanking(list = []) {
+  return list.length
+    ? list
+        .slice(0, 10)
+        .map(
+          (c, i) =>
+            `<div class="lbrow"><span>${i + 1}. <span class="tag">${esc(c.tag)}</span> ${esc(c.name)}</span><span>${c.weekKg} kg</span></div>`,
+        )
+        .join('')
+    : '<div class="note">Nog geen clubs.</div>';
+}
+/** Het gezamenlijke dagdoel (ook gebruikt in het opdrachtenpaneel). */
+export function communityHTML(c, full = false) {
+  if (!c) return '<div class="note">Laden...</div>';
+  const unit = c.kind === 'kg' ? ' kg' : '';
+  let h = `<div class="item"><div class="ic">${c.done ? '✅' : '🌍'}</div><div class="mid"><b>${esc(c.text)}</b><div class="pbar"><i style="width:${Math.min(100, (c.p / c.n) * 100)}%"></i></div><small>${c.p}${unit} / ${c.n}${unit} · jij droeg ${c.mine}${unit} bij · beloning voor iedereen die meedoet: 🪙 ${c.reward.coins} + ${c.reward.xp} xp</small></div></div>`;
+  if (full)
+    h +=
+      `<div class="sec"><span>Grootste bijdragen vandaag</span></div>` +
+      (c.top.length
+        ? c.top.map((t, i) => `<div class="lbrow"><span>${i + 1}. ${esc(t.name)}</span><span>${t.v}${unit}</span></div>`).join('')
+        : '<div class="note">Nog niemand. Wees de eerste!</div>') +
+      `<div class="note" style="margin-top:8px">Het dagdoel geldt voor alle spelers op de server, in alle kamers. Elke dag een nieuw doel.</div>`;
   return h;
 }
 export function boardHTML(save, ctx) {
@@ -322,10 +420,29 @@ export function settingsHTML(st) {
   return `<div class="item"><div class="mid"><b>Graphics</b><small>Herlaad de pagina na het wisselen. Telefoons staan op Laag.</small></div><select id="setQ">${['Laag', 'Middel', 'Hoog'].map((n, i) => `<option value="${i}" ${st.q === i ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
   <div class="item"><div class="mid"><b>Geluid</b></div><input id="setVol" type="range" min="0" max="100" value="${st.vol}"></div>
   <div class="item"><div class="mid"><b>Muisgevoeligheid</b></div><input id="setSens" type="range" min="20" max="200" value="${st.sens}"></div>
+  <div class="row" style="margin:12px 0"><button data-act="shareLink">🔗 Vrienden uitnodigen</button>${st.canInstall ? '<button data-act="install">📲 Installeer als app</button>' : ''}</div>
   <div class="row" style="margin:12px 0"><button data-act="help">❓ Besturing</button><button data-act="photo">📸 Fotomodus</button><button data-act="home">🏠 Naar huis</button></div>
   <div class="row"><button data-act="leave">🚪 Naar de lobby</button><button data-act="close">Verder spelen</button></div>`;
 }
-export function aqHTML(info) {
+export function aqHTML(info, save, mine) {
+  let top = '';
+  if (mine) {
+    const owned = S.DECOR.filter(D => D.id in (save.deco || {}));
+    top += `<div class="row" style="margin-bottom:10px"><button class="pri" data-act="inviteHouse">📨 Vrienden uitnodigen</button></div>`;
+    top += `<div class="sec"><span>🛋️ Inrichting</span><span class="note">meer in de Hengelwinkel (tab Huis)</span></div>`;
+    top += owned.length
+      ? owned
+          .map(D => {
+            const on = save.deco[D.id];
+            return `<div class="item"><div class="ic">${D.icon}</div><div class="mid"><b>${D.name}</b><small>${on ? 'staat in je huis' : 'opgeborgen'}</small></div><button data-act="deco" data-id="${D.id}" data-on="${on ? 0 : 1}">${on ? 'Opbergen' : 'Neerzetten'}</button></div>`;
+          })
+          .join('')
+      : '<div class="note">Je hebt nog geen inrichting. Koop een schatkist, bank of open haard in de Hengelwinkel!</div>';
+    top += `<div class="sec"><span>🐠 Collectie</span></div>`;
+  }
+  return top + aqCollection(info);
+}
+function aqCollection(info) {
   let h = `<div class="note"><b>Huis van ${esc(info.n)}</b> · ${info.sp.length} van de ${SPECIES.length} soorten gevangen${info.d ? ' · 🐕 ' + esc(info.d) + ' ligt in de mand' : ''}</div><div class="pbar"><i style="width:${(info.sp.length / SPECIES.length) * 100}%"></i></div>`;
   h += info.sp.length
     ? '<div class="grid">' +
@@ -344,6 +461,9 @@ export function aqHTML(info) {
 export function helpHTML() {
   const k = (a, b) =>
     `<div class="item" style="padding:6px 10px"><b style="min-width:150px;color:var(--acc)">${a}</b><span>${b}</span></div>`;
-  return `<div class="sec"><span>⌨️ Toetsenbord en muis</span></div>${k('W A S D / pijltjes', 'lopen (Shift = rennen)')}${k('Muis', 'rondkijken (klik op het spel om de muis vast te zetten)')}${k('Linkermuisknop of spatie', 'werpen · aanslaan als de dobber zakt · ingedrukt houden = inhalen')}${k('E', 'praten, winkel, kampvuur, hek, kar')}${k('X', 'lijn binnenhalen / loslaten')}${k('B', 'in of uit de roeiboot')}${k('V', 'fiets of scooter pakken of wegzetten')}${k('1 - 9, [ en ]', 'ander aas kiezen')}${k('F', 'vis behouden · G = terugzetten (bij de vangstkaart)')}${k('I J O M T H', 'tas · visboek · opdrachten · kaart · talenten · spelers')}${k('Menu > Naar huis', 'terug naar je huis in het dorp (met aquarium en hondenmand)')}${k('Z N K L', 'zwaaien · lachen · duim · je laatste vangst tonen')}${k('Enter', 'chatten')}${k('P', 'fotomodus')}${k('Esc', 'menu')}
-  <div class="sec"><span>🎣 Zo vang je een vis</span></div><div class="note">1. Richt op het water en gooi uit. 2. Wacht tot een vis het aas pakt: de dobber zakt en je ziet "Aanslaan!". 3. Klik snel. 4. <b>Houd inhalen ingedrukt terwijl de vis rustig is</b>, en <b>laat los zodra hij gaat trekken</b> (rode waarschuwing). Blijft de spanning te lang op rood, dan knapt je lijn. 5. Behoud of zet terug: terugzetten geeft reputatie en dus korting.<br><br>Vissen zwemmen echt rond: je ziet ze als schaduwen in het water. Elke soort heeft eigen voorkeuren voor aas, dag of nacht en weer. Let op reigers: die stelen je vis als je niet snel kiest, tenzij je een hond hebt.</div>`;
+  return `<div class="sec"><span>⌨️ Toetsenbord en muis</span></div>${k('W A S D / pijltjes', 'lopen (Shift = rennen)')}${k('Muis', 'rondkijken (klik op het spel om de muis vast te zetten)')}${k('Linkermuisknop of spatie', 'ingedrukt houden en loslaten = werpen (krachtbalk) · aanslaan · ingedrukt houden = inhalen')}${k('E', 'praten, winkel, kampvuur, hek, kar')}${k('X', 'lijn binnenhalen / loslaten')}${k('B', 'in of uit de roeiboot')}${k('V', 'fiets of scooter pakken of wegzetten')}${k('1 - 9, [ en ]', 'ander aas kiezen')}${k('F', 'vis behouden · G = terugzetten (bij de vangstkaart)')}${k('I J O M T H', 'tas · visboek · opdrachten · kaart · talenten · spelers')}${k('Menu > Naar huis', 'terug naar je huis in het dorp (met aquarium en hondenmand)')}${k('Z N K L', 'zwaaien · lachen · duim · je laatste vangst tonen')}${k('Enter', 'chatten')}${k('P', 'fotomodus')}${k('Esc', 'menu')}
+  <div class="sec"><span>🎣 Zo vang je een vis</span></div><div class="note">1. <b>Werpen:</b> kijk naar het water, houd de knop ingedrukt en laat los. Hoe voller de krachtbalk, hoe verder je gooit. Laat je los in het <b>gouden vak</b>, dan is het een perfecte worp: meer kans op een beet. 2. Wacht tot een vis het aas pakt en je "Aanslaan!" ziet. 3. Klik snel. 4. <b>Houd inhalen ingedrukt terwijl de vis rustig is</b>, en <b>laat los zodra hij gaat trekken</b> (rode waarschuwing). Blijft de spanning te lang op rood, dan knapt je lijn. 5. Behoud of zet terug: terugzetten geeft reputatie en dus korting.</div>
+  <div class="sec"><span>🎯 Technieken (hangen af van je aas)</span></div><div class="note">🎈 <b>Dobber</b> (wormen, maden, brood, garnalen, gloed- en maanaas): wacht tot de dobber onder gaat.<br>⚓ <b>Grondvissen</b> (boilies, levend aas): geen dobber, je hoort een belletje. Het duurt langer, maar vooral zware vissen bijten.<br>🎯 <b>Kunstaas</b> (spinner, kunstvlieg): houd ingedrukt om het aas binnen te draaien; roofvissen jagen op bewegend aas. Laat je los, dan stopt het aas.</div>
+  <div class="sec"><span>🫧 Visstekken en de reuzenvis</span></div><div class="note">Zie je <b>bubbels of springende vissen</b>? Daar is een visstek: vaker beet en zwaardere vissen. Stekken verhuizen elke paar minuten.<br>Af en toe verschijnt er een <b>reuzenvis</b> (🐋 rechtsboven). Werp in de buurt, haak hem en haal hem <b>samen</b> binnen: iedereen die meehelpt krijgt een flinke beloning.</div>
+  <div class="note" style="margin-top:8px">Vissen zwemmen echt rond: je ziet ze als schaduwen in het water. Elke soort heeft eigen voorkeuren voor aas, dag of nacht en weer. Let op reigers: die stelen je vis als je niet snel kiest, tenzij je een hond hebt.</div>`;
 }

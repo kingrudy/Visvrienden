@@ -11,7 +11,11 @@ if (typeof requestAnimationFrame === 'function') {
   };
   requestAnimationFrame(tick);
 }
+/** Lage grafische kwaliteit (telefoons): geen contouren, dat scheelt de helft van de te tekenen vormen. */
+let low = false;
+export const setLowQuality = on => (low = !!on);
 export function outlineFit(root, t = 0.022) {
+  if (low) return root;
   const list = [];
   root.traverse(o => {
     if (o.isMesh && !o.userData.isOutline && o.visible && !o.material.transparent && !o.material.isMeshBasicMaterial) list.push(o);
@@ -90,6 +94,7 @@ export const OUTLINE_COLOR = 0x3a1d2b,
 const OUTLINE_MAT = new THREE.MeshBasicMaterial({ color: OUTLINE_COLOR, side: THREE.BackSide }); // gedeeld door alle vissen
 // Voegt aan elke mesh in object3D een contour-kindmesh toe (zelfde geometry, gedeeld materiaal). Meshes met userData.noOutline (ogen, gloed) blijven vrij.
 export function addOutline(object3D, scale = OUTLINE_SCALE) {
+  if (low) return object3D;
   const meshes = [];
   object3D.traverse(o => {
     if (o.isMesh && !o.userData.noOutline && !o.userData.isOutline) meshes.push(o);

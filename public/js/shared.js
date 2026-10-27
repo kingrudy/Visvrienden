@@ -497,7 +497,7 @@ export const DECOR = [
   { id: 'lamp', name: 'Staande lamp', icon: '💡', price: 80, where: 'huis', desc: 'Warm licht in je huis.' },
   { id: 'kast', name: 'Trofeekast', icon: '🏆', price: 260, where: 'huis', desc: 'Toont je bekers en je zwaarste vangst.' },
   { id: 'plant', name: 'Kamerplant', icon: '🪴', price: 60, where: 'huis', desc: 'Een grote plant in een pot.' },
-  { id: 'kleed', name: 'Vloerkleed', icon: '🟥', price: 70, where: 'huis', desc: 'Een zacht rond kleed.' },
+  { id: 'schilderij', name: 'Schilderij', icon: '🖼️', price: 110, where: 'huis', desc: 'Een schilderij van je zwaarste vangst.' },
   { id: 'haard', name: 'Open haard', icon: '🔥', price: 300, where: 'huis', desc: 'Een knapperend haardvuur.' },
 ];
 export const DECO = Object.fromEntries(DECOR.map(d => [d.id, d]));

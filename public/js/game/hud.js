@@ -4,7 +4,7 @@ import { PONDS, RARITY, BAITS, BAIT } from '../shared.js';
 import * as UI from '../ui/html.js';
 import { renderPanel } from './panels.js';
 import { refreshLobby } from './screens.js';
-import { updateFightUI } from './fishing.js';
+import { updateFightUI, waitText } from './fishing.js';
 import { findInteract } from './interact.js';
 import { $, G, R, clamp, isTouch, me, nearPond, send } from './state.js';
 
@@ -60,8 +60,9 @@ export function updateHotbar() {
   const rs = S.rodStats(s),
     now = Date.now();
   const baits = BAITS.filter(b => (s.baits[b.id] | 0) > 0 || b.id === s.bait);
-  hb.innerHTML =
-    `<div id="rodbox"><b style="color:${rs.rod.color}">🎣 ${rs.rod.name}</b><span class="note">slijtage ${Math.round(rs.dur)}% · ${s.dog ? '🐕 ' + UI.esc(s.dog.name) : ''}</span></div>` +
+  const tech = S.TECHS[S.techOf(s.bait)];
+  const html =
+    `<div id="rodbox"><b style="color:${rs.rod.color}">🎣 ${rs.rod.name}</b><span class="note">${tech.icon} ${tech.name} · slijtage ${Math.round(rs.dur)}%${s.dog ? ' · 🐕 ' + UI.esc(s.dog.name) : ''}</span></div>` +
     baits
       .map(
         (b, i) =>
@@ -75,6 +76,9 @@ export function updateHotbar() {
           `<div class="slot" title="${S.BUFFS[k].desc}"><span class="ic">${S.BUFFS[k].icon}</span><span class="n">${Math.ceil((s.buffs[k] - now) / 60000)} min</span></div>`,
       )
       .join('');
+  if (html === hb.dataset.html) return updateTouchIcons(s); // niets veranderd: DOM met rust laten (sneller op telefoons)
+  hb.dataset.html = html;
+  hb.innerHTML = html;
   hb.querySelectorAll('[data-bait]').forEach(
     e =>
       (e.onclick = () => {
@@ -83,6 +87,9 @@ export function updateHotbar() {
         updateHotbar();
       }),
   );
+  updateTouchIcons(s);
+}
+function updateTouchIcons(s) {
   $('tbBait').textContent = BAIT[s.bait].icon;
   $('tbVeh').textContent = me.mount === 'scooter' ? '🛵' : '🚲';
   $('tbBoat').textContent = me.mount === 'boat' ? '🚶' : '🛶';
@@ -108,7 +115,10 @@ export function updateHUD() {
         q =>
           `<div class="q ${q.done ? 'done' : ''}">${UI.esc(S.QUEST_KINDS[q.kind].text(q.n, q.sp))} <span class="note">${q.p}/${q.n}</span></div>`,
       )
-      .join('');
+      .join('') +
+    (G.community
+      ? `<div class="q ${G.community.done ? 'done' : ''}">🌍 ${UI.esc(G.community.text.replace('vandaag ', ''))} <span class="note">${Math.floor(G.community.p)}/${G.community.n}</span></div>`
+      : '');
   const sonar = s.upg.sonar > 0;
   $('sonar').classList.toggle('hidden', !sonar);
 }
@@ -175,6 +185,8 @@ export function drawMini() {
   for (const sh of S.SHOPS) dot(sh.x, sh.z, sh.type === 'kiosk' ? '#ffd24a' : '#ff8a3a', 4);
   for (const g of S.GATES) dot(g.x, g.z, G.save.unlocked.includes(g.pond) ? '#7ae8a0' : '#ff6a5a', 4);
   if (G.merchant) dot(G.merchant.x, G.merchant.z, '#d08aff', 5);
+  for (const list of G.hot.values()) for (const [hx, hz] of list) dot(hx, hz, '#8fe8ff', 3); // visstekken
+  if (G.boss) dot(G.boss.x, G.boss.z, '#ffc94a', 6); // reuzenvis
   for (const e of G.players.values()) if (!e.isMe) dot(e.x, e.z, '#ffffff', 3.5);
   x.restore();
   x.fillStyle = '#6fe08a';
@@ -279,7 +291,7 @@ export function tickHud(dt, ph) {
   } // aftellende bonussen
   if (G.statusUntil && performance.now() > G.statusUntil) {
     G.statusUntil = 0;
-    if (me.fs === 1) setStatus('Wachten op een beet...', '', 0, true);
+    if (me.fs === 1) setStatus(waitText(), '', 0, true);
     else setStatus('', '');
   }
   drawMini();

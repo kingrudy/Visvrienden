@@ -91,7 +91,7 @@ export const boss = {
     }
     P.fs = 3;
     P.reel = false;
-    P.fight = { boss: true, T: 30, D: 0, phase: 'rest', pt: rnd(1, 2), stam: 100, snap: 0, send: 0 };
+    P.fight = { boss: true, T: 30, D: 70, phase: 'rest', pt: rnd(1, 2), stam: 100, snap: 0, send: 0 };
     if (!b.fighters.has(P.id)) b.fighters.set(P.id, 0);
     this.feed(`${P.name} heeft de reuzenvis aan de haak! Help mee!`, 'rare');
   },
