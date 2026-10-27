@@ -4,3 +4,4 @@ export const PROGRESS = '../server/game/progress.js';
 export const ROOM = '../server/game/room.js';
 export const SERVER = '../server.js';
 export const RULES = '../server/game/rules.js';
+export const FILTER = '../server/game/filter.js';

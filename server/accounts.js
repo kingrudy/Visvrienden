@@ -4,13 +4,14 @@ import { promisify } from 'node:util';
 import { db, markDirty, allUsers } from './db.js';
 import { ensureSave, houseInfo } from './game/progress.js';
 import { HOUSE_SLOTS } from '../public/js/shared.js';
+import { isRude } from './game/filter.js';
 
 const scrypt = promisify(crypto.scrypt);
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const USER_RE = /^[A-Za-z0-9_-]{3,16}$/;
 const SESSION_MS = 30 * 24 * 3600 * 1000;
 const ATTEMPT_WINDOW_MS = 60000,
-  MAX_ATTEMPTS = 15;
+  MAX_ATTEMPTS = Number(process.env.LOGIN_LIMIT) || 15; // pogingen per minuut per adres
 
 const hashPw = async (pw, salt) => (await scrypt(pw, salt, 64)).toString('hex');
 
@@ -43,6 +44,7 @@ export function prepareUser(u) {
 export async function register(name, pw) {
   if (typeof name !== 'string' || !USER_RE.test(name)) return { err: 'Gebruikersnaam: 3-16 tekens (letters, cijfers, _ of -).' };
   if (typeof pw !== 'string' || pw.length < 6 || pw.length > 72) return { err: 'Wachtwoord: minimaal 6 tekens.' };
+  if (isRude(name)) return { err: 'Kies een nettere gebruikersnaam.' };
   const key = name.toLowerCase();
   if (db.users[key]) return { err: 'Die gebruikersnaam is al in gebruik.' };
   const salt = crypto.randomBytes(16).toString('hex'),

@@ -14,6 +14,23 @@ export const CFG = {
   catchCardMs: 9000,
   heronCardMs: 4000,
   contestPrizes: [300, 150, 75],
+  // visstekken
+  hotR: 7, // straal van een stek (m)
+  hotMin: 150,
+  hotMax: 300, // een stek verhuist na zoveel seconden
+  hotBite: 1.6, // meer beten op een stek
+  hotWeight: 1.2, // en zwaardere vissen
+  // werpen en technieken
+  perfectBite: 1.25, // perfecte worp: meer kans op een beet
+  lureSpeed: 2.4, // kunstaas binnendraaien (m/s)
+  lureBite: 1.3, // roofvissen houden van bewegend aas
+  // reuzenvis
+  bossFirst: [480, 900], // eerste reuzenvis na zoveel seconden spelen in de kamer
+  bossEvery: [900, 1500], // daarna elke zoveel seconden
+  bossStay: 300, // zoveel seconden blijft hij
+  bossBiteR: 14, // aas binnen deze afstand: kans dat de reus toehapt
+  bossHp: [300, 150], // levens: basis + per speler in de kamer
+  bossReward: { coins: 250, xp: 400, rep: 20 },
   dogNames: ['Bobbel', 'Snuf', 'Dobber', 'Pluk', 'Max', 'Fikkie', 'Rakker', 'Sproet', 'Knor', 'Bello', 'Wally', 'Tobbe'],
 };
 

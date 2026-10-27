@@ -1,9 +1,14 @@
 // Room-methodes voor het vissen: de vissen in de vijvers, werpen, aanbeet, drillen, vangen en behouden/terugzetten.
 // Visstatus van een speler (P.fs): 0 = niks, 1 = dobber in het water, 2 = beet (aanslaan!), 3 = drillen.
+// Techniek (P.tech) volgt uit het aas: dobber, grond (langer wachten, zwaardere vis) of kunstaas (binnendraaien).
+// Visstekken (this.hot) zijn wisselende plekken met meer en zwaardere vis.
 import * as S from '../../public/js/shared.js';
 import { CFG, appeal, legendOk, weightFor, catchXp } from './rules.js';
 import { r1, r2, rnd, clamp } from './util.js';
 const { PONDS, SPECIES, SP, RARITY, BAIT } = S;
+
+const TECH_ROLL = { dobber: 1, grond: 1.6, kunstaas: 0.5 }; // seconden tussen kansen op een vis
+const TECH_WINDOW = { dobber: 1, grond: 1.5, kunstaas: 0.8 }; // tijd om aan te slaan (× hengel)
 
 /** @this {import('./room.js').Room} */
 export const fishing = {
@@ -13,7 +18,22 @@ export const fishing = {
     this.fish = PONDS.map(() => []);
     this.legCd = {};
     this.legT = 0;
+    this.hot = PONDS.map(p => this.newHotspots(p));
     for (const p of PONDS) while (this.fish[p.id].length < p.fish) this.spawnFish(p, null);
+  },
+  /* ---------------- visstekken */
+  newHotspots(p) {
+    const n = p.r >= 44 ? 2 : 1,
+      out = [];
+    for (let i = 0; i < n; i++) {
+      let pt = this.randWater(p);
+      for (let k = 0; k < 10 && Math.hypot(pt.x - p.x, pt.z - p.z) > p.r * 0.75; k++) pt = this.randWater(p); // niet tegen de kant
+      out.push({ x: pt.x, z: pt.z, until: this.t + rnd(CFG.hotMin, CFG.hotMax) });
+    }
+    return out;
+  },
+  hotAt(pond, x, z) {
+    return this.hot[pond]?.find(h => Math.hypot(h.x - x, h.z - z) < CFG.hotR) || null;
   },
   randWater(p) {
     for (let i = 0; i < 60; i++) {
@@ -104,6 +124,9 @@ export const fishing = {
           f.h += rnd(-1.2, 1.2);
           f.spd = rnd(0.4, 1.2);
           f.tTurn = rnd(1.5, 5);
+          // vissen trekken graag naar een visstek
+          const h = this.hot[p.id][0 | (Math.random() * this.hot[p.id].length)];
+          if (h && Math.random() < 0.35 && Math.hypot(h.x - f.x, h.z - f.z) > 4) f.h = Math.atan2(h.z - f.z, h.x - f.x) + rnd(-0.3, 0.3);
         }
         const nx = f.x + Math.cos(f.h) * f.spd * dt,
           nz = f.z + Math.sin(f.h) * f.spd * dt;
@@ -123,6 +146,10 @@ export const fishing = {
     const tc = this.tc,
       now = Date.now();
     for (const p of PONDS) {
+      if (this.hot[p.id].some(h => this.t > h.until)) {
+        this.hot[p.id] = this.newHotspots(p);
+        this.broadcast({ t: 'hot', pond: p.id });
+      }
       const list = this.fish[p.id];
       let normal = list.filter(f => !f.sp.leg).length;
       while (normal < p.fish) {
@@ -149,6 +176,7 @@ export const fishing = {
         r1(h.x),
         r1(h.z),
         this.fish[p.id].map(f => [f.id, f.sp.i, r1(f.x), r1(f.z), r2(f.h), r2(f.w), f.state === 'chase' || f.state === 'bite' ? 1 : 0]),
+        this.hot[p.id].map(h => [r1(h.x), r1(h.z)]),
       ]);
     }
     return ponds;
@@ -186,13 +214,33 @@ export const fishing = {
     if (pond < 0) return this.toast(P, 'Richt op het water.', 'warn');
     if (this.pondLocked(P, pond)) return;
     if (P.pending) this.keepFish(P, P.pending.id, true);
-    Object.assign(P, { fs: 1, bx: x, bz: z, pond, waitT: 0, rollT: 0.5, chase: null, hintT: 0 });
+    const tech = S.techOf(P.save.bait),
+      perfect = !!m.perfect;
+    Object.assign(P, {
+      fs: 1,
+      bx: x,
+      bz: z,
+      pond,
+      waitT: 0,
+      rollT: TECH_ROLL[tech] * 0.5,
+      chase: null,
+      hintT: 0,
+      tech,
+      perfect,
+      lureMoving: false,
+    });
+    if (perfect) {
+      P.save.stats.perfectCasts++;
+      this.checkAch(P);
+      this.dirty(P);
+    }
     this.splash(P, 0);
   },
   splash(P, big) {
     this.broadcast({ t: 'ev', k: 'splash', x: r1(P.bx), z: r1(P.bz), id: P.id, big });
   },
   hook(P) {
+    if (P.fs === 2 && P.chase === 'boss') return this.bossHook(P);
     if (P.fs === 2) {
       const f = this.findFish(P.chase);
       if (!f) {
@@ -237,18 +285,19 @@ export const fishing = {
     if (P.fs === 1) this.updateWaiting(P, dt, rs);
     else if (P.fs === 2) {
       if ((P.biteT -= dt) <= 0) {
-        this.freeFish(this.findFish(P.chase), 40);
+        if (P.chase !== 'boss') this.freeFish(this.findFish(P.chase), 40);
         P.fs = 0;
         P.chase = null;
         this.send(P, { t: 'lost', msg: 'Te laat! De vis nam het aas mee.' });
       }
     } else if (P.fs === 3) this.updateFight(P, dt);
   },
-  /** Dobber ligt in het water: elke seconde kans dat een vis in de buurt komt kijken. */
+  /** Aas ligt in het water: regelmatig kans dat een vis in de buurt komt kijken. */
   updateWaiting(P, dt, rs) {
     P.waitT += dt;
     P.rollT -= dt;
     P.hintT += dt;
+    if (P.tech === 'kunstaas' && this.retrieveLure(P, dt)) return;
     if (P.chase) {
       const f = this.findFish(P.chase);
       if (!f || f.busy !== P.id) P.chase = null;
@@ -256,21 +305,30 @@ export const fishing = {
         if (Math.random() >= P.save.talents.zuinig * 0.08) P.save.baits[P.save.bait]--; // aas op (Zuinig kan helpen)
         f.state = 'bite';
         P.fs = 2;
-        P.biteT = rs.window;
+        P.biteT = rs.window * TECH_WINDOW[P.tech];
         this.dirty(P);
         return this.splash(P, 0);
       }
     } else if (P.rollT <= 0) {
-      P.rollT = 1;
+      P.rollT = TECH_ROLL[P.tech];
+      if (P.tech === 'kunstaas' && !P.lureMoving) return; // kunstaas werkt alleen als het beweegt
+      if (this.bossBite(P, rs)) return;
       const tc = this.tc,
         bait = P.save.bait,
-        featured = S.featuredSpecies().id;
+        featured = S.featuredSpecies().id,
+        hot = this.hotAt(P.pond, P.bx, P.bz);
+      const bonus = (P.perfect ? CFG.perfectBite : 1) * (hot ? CFG.hotBite : 1) * (P.tech === 'kunstaas' ? CFG.lureBite : 1);
       for (const f of this.fish[P.pond]) {
         if (f.busy || f.scared > 0) continue;
         if (Math.hypot(f.x - P.bx, f.z - P.bz) > (f.sp.leg ? CFG.legendBiteRadius : CFG.biteRadius)) continue;
         const a = appeal(f.sp, bait, tc, this.weather);
         if (a <= 0) continue;
-        const prob = clamp(a * 0.75 * rs.bite * (1 + rs.luck * 0.07 * f.sp.rar) * (f.sp.id === featured ? S.FEATURED_BITE : 1), 0, 0.9);
+        const heavy = P.tech === 'grond' ? 1 + 0.6 * (f.w / f.sp.w[1]) : 1; // op de bodem pakken vooral de zware vissen
+        const prob = clamp(
+          a * 0.75 * rs.bite * bonus * heavy * (1 + rs.luck * 0.07 * f.sp.rar) * (f.sp.id === featured ? S.FEATURED_BITE : 1),
+          0,
+          0.9,
+        );
         if (Math.random() < prob) {
           f.busy = P.id;
           f.state = 'chase';
@@ -281,17 +339,54 @@ export const fishing = {
     }
     if (P.hintT > 40 && !P.chase) {
       P.hintT = -1e9;
-      this.toast(P, 'Het blijft stil... Probeer ander aas, een andere plek of een ander moment van de dag.', 'info');
+      this.toast(P, 'Het blijft stil... Probeer ander aas, een andere plek (zoek bubbels!) of een ander moment van de dag.', 'info');
     }
+  },
+  /** Kunstaas: binnendraaien (P.reel) trekt het aas naar je toe. Geeft true als het aas binnen is. */
+  retrieveLure(P, dt) {
+    P.lureMoving = P.reel;
+    if (!P.reel) return false;
+    const dx = P.x - P.bx,
+      dz = P.z - P.bz,
+      d = Math.hypot(dx, dz),
+      step = Math.min(d, CFG.lureSpeed * dt);
+    const nx = P.bx + (dx / d) * step,
+      nz = P.bz + (dz / d) * step;
+    if (d < 2.2 || S.pondWater(nx, nz) !== P.pond) {
+      if (P.chase) this.freeFish(this.findFish(P.chase), 5);
+      P.fs = 0;
+      P.chase = null;
+      P.reel = false;
+      this.send(P, { t: 'lost', msg: 'Je aas is binnen zonder beet. Werp opnieuw uit!' });
+      return true;
+    }
+    P.bx = nx;
+    P.bz = nz;
+    return false;
   },
   /** Drillen: de vis wisselt rusten, waarschuwen en trekken af. Inhalen terwijl hij trekt laat de lijn knappen. */
   updateFight(P, dt) {
+    if (P.fight.boss) return this.updateBossFight(P, dt);
     const F = P.fight,
       f = this.findFish(F.fid);
     if (!f) return this.loseFish(P, 'De vis is weg.');
     const rs = S.rodStats(P.save),
-      sf = F.stam / 100,
-      pullF = f.str * 20 * (60 / rs.line);
+      { sf, pullF } = this.fightStep(F, dt, f.str, rs, P.reel);
+    if (F.phase === 'run')
+      F.D += (P.reel ? 1.5 : 4 + pullF * 0.2 * (0.5 + 0.5 * sf)) * dt; // afstand tot de vis
+    else if (P.reel) F.D -= 9 * rs.reel * (1 + (1 - sf) * 0.7) * dt;
+    if (F.snap > 0.55) return this.loseFish(P, 'De lijn knapte! Laat de lijn vieren als de vis trekt.', true);
+    if (F.D >= 100) return this.loseFish(P, 'De vis rukte zich los en is weg.');
+    if (F.D <= 0) return this.landFish(P, f);
+    if ((F.send -= dt) <= 0) {
+      F.send = 0.1;
+      this.send(P, { t: 'fight', T: r1(F.T), D: r1(F.D), ph: F.phase, st: Math.round(F.stam), fid: f.sp.i, w: f.w });
+    }
+  },
+  /** Gedeelde natuurkunde van het drillen: fases, spanning op de lijn (F.T), vermoeidheid (F.stam) en lijnbreuk (F.snap). */
+  fightStep(F, dt, str, rs, reeling) {
+    const sf = F.stam / 100,
+      pullF = str * 20 * (60 / rs.line);
     if ((F.pt -= dt) <= 0) {
       if (F.phase === 'rest') {
         F.phase = 'warn';
@@ -301,39 +396,19 @@ export const fishing = {
         F.pt = (1 + Math.random() * 1.2) * (0.5 + 0.5 * sf);
       } else {
         F.phase = 'rest';
-        F.pt = (1.2 + Math.random() * 1.6) * (1.1 - Math.min(0.4, f.str * 0.1));
+        F.pt = (1.2 + Math.random() * 1.6) * (1.1 - Math.min(0.4, str * 0.1));
       }
     }
-    const reeling = P.reel;
-    const target =
-      F.phase === 'run'
-        ? reeling
-          ? 80 + pullF * (0.6 + 0.4 * sf)
-          : 38 + pullF * 0.25 * sf
-        : F.phase === 'warn'
-          ? reeling
-            ? 62
-            : 12
-          : reeling
-            ? 52 + pullF * 0.15
-            : 8;
-    F.T += (target - F.T) * (1 - Math.exp(-4 * dt)); // spanning op de lijn
-    if (F.phase === 'run') {
-      F.D += (reeling ? 1.5 : 4 + pullF * 0.2 * (0.5 + 0.5 * sf)) * dt; // afstand tot de vis
-      F.stam = Math.max(10, F.stam - 9 * (f.str / 3 + 0.6) * dt);
-    } else {
-      if (reeling) F.D -= 9 * rs.reel * (1 + (1 - sf) * 0.7) * dt;
-      F.stam = Math.min(100, F.stam + 1.5 * dt);
-    }
+    let target;
+    if (F.phase === 'run') target = reeling ? 80 + pullF * (0.6 + 0.4 * sf) : 38 + pullF * 0.25 * sf;
+    else if (F.phase === 'warn') target = reeling ? 62 : 12;
+    else target = reeling ? 52 + pullF * 0.15 : 8;
+    F.T += (target - F.T) * (1 - Math.exp(-4 * dt));
+    if (F.phase === 'run') F.stam = Math.max(10, F.stam - 9 * (str / 3 + 0.6) * dt);
+    else F.stam = Math.min(100, F.stam + 1.5 * dt);
     if (F.T >= 100) F.snap += dt;
     else F.snap = Math.max(0, F.snap - dt * 0.8);
-    if (F.snap > 0.55) return this.loseFish(P, 'De lijn knapte! Laat de lijn vieren als de vis trekt.', true);
-    if (F.D >= 100) return this.loseFish(P, 'De vis rukte zich los en is weg.');
-    if (F.D <= 0) return this.landFish(P, f);
-    if ((F.send -= dt) <= 0) {
-      F.send = 0.1;
-      this.send(P, { t: 'fight', T: r1(F.T), D: r1(F.D), ph: F.phase, st: Math.round(F.stam), fid: f.sp.i, w: f.w });
-    }
+    return { sf, pullF };
   },
 
   /* ---------------- vangst */
@@ -347,22 +422,26 @@ export const fishing = {
     P.fight = null;
     P.chase = null;
     P.reel = false;
-    const fish = { sp: sp.id, w: f.w, pond: sp.pond, t: Date.now() };
-    P.lastCatch = { sp: sp.id, w: f.w };
+    const hot = !!this.hotAt(sp.pond, P.bx, P.bz),
+      w = hot ? r2(Math.max(f.w, Math.min(sp.w[1] * 1.1, f.w * CFG.hotWeight))) : f.w; // op een stek zwaarder
+    const fish = { sp: sp.id, w, pond: sp.pond, t: Date.now(), hot };
+    P.lastCatch = { sp: sp.id, w };
     const newSp = !s.book[sp.id],
-      rec = newSp || s.book[sp.id].best < f.w;
-    this.recordCatch(P, sp, f.w, tc);
+      rec = newSp || s.book[sp.id].best < w;
+    this.recordCatch(P, sp, w, tc);
+    if (hot) s.stats.hotCatches++;
+    this.onCatch(P.user, sp, w);
     if (newSp) this.sendHouse(P);
-    const xp = catchXp(sp, f.w);
+    const xp = catchXp(sp, w);
     this.addXp(P, xp);
     this.quest(P, 'catch', 1);
-    this.quest(P, 'heavy', 1, { w: f.w });
+    this.quest(P, 'heavy', 1, { w: w });
     this.quest(P, 'species', 1, { sp: sp.id });
     if (tc === 'nacht') this.quest(P, 'night', 1);
     if (sp.rar >= 2) this.quest(P, 'rare', 1);
     if (this.contest) {
       const b = this.contest.best[P.id];
-      if (!b || f.w > b.w) this.contest.best[P.id] = { w: f.w, sp: sp.id, name: P.name };
+      if (!b || w > b.w) this.contest.best[P.id] = { w: w, sp: sp.id, name: P.name };
     }
     // zonder hond kan een reiger in de buurt de vis stelen als je te lang twijfelt
     const h = !s.dog && this.heronPos(sp.pond),
@@ -370,8 +449,8 @@ export const fishing = {
     P.pending = { fish, id: s.nextId++, at: Date.now(), heron, xp };
     this.send(P, { t: 'catch', fish, fid: P.pending.id, xp, rec, heron, rarity: sp.rar, ms: heron ? CFG.heronCardMs : CFG.catchCardMs });
     this.splash(P, 1);
-    if (sp.rar >= 3 || f.w >= 10)
-      this.feed(`${P.name} ving ${sp.leg ? 'de legendarische ' : 'een '}${sp.name} van ${S.fmtKg(f.w)}!`, sp.leg ? 'legend' : 'rare', P);
+    if (sp.rar >= 3 || w >= 10)
+      this.feed(`${P.name} ving ${sp.leg ? 'de legendarische ' : 'een '}${sp.name} van ${S.fmtKg(w)}!`, sp.leg ? 'legend' : 'rare', P);
     this.checkUnlocks(P);
     this.checkAch(P);
     this.dirty(P);
@@ -417,6 +496,7 @@ export const fishing = {
       s.rep += rp;
       this.addXp(P, Math.round(pd.xp * 0.4));
       this.quest(P, 'release', 1);
+      this.onRelease(P.user);
       this.toast(P, `${sp.name} teruggezet. +${rp} reputatie.`, 'good');
       this.checkAch(P);
     }

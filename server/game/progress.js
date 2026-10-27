@@ -100,6 +100,9 @@ export function ensureSave(u) {
       nightCatches: 0,
       stormCatches: 0,
       contestWins: 0,
+      bossWins: 0,
+      perfectCasts: 0,
+      hotCatches: 0,
       cooked: 0,
       pond: {},
     },
@@ -113,6 +116,13 @@ export function ensureSave(u) {
   s.trophies = Math.max(0, s.trophies | 0);
   if (!Number.isInteger(s.look) || s.look < 0 || s.look > 3) s.look = strHash(u.name) % 4;
   if (!Number.isInteger(s.house)) s.house = -1;
+  // samen spelen en inrichting
+  s.friends = Array.isArray(s.friends) ? [...new Set(s.friends.filter(n => typeof n === 'string'))].slice(0, 50) : [];
+  if (typeof s.club !== 'string') s.club = null;
+  if (!isObj(s.deco)) s.deco = {};
+  for (const k of Object.keys(s.deco))
+    if (!S.DECO[k]) delete s.deco[k];
+    else s.deco[k] = s.deco[k] !== false; // gekocht; false = opgeborgen
   ensureDaily(u);
   return s;
 }
@@ -123,5 +133,7 @@ export function houseInfo(save, name) {
     .filter(([id]) => SP[id])
     .sort((a, b) => SP[b[0]].rar - SP[a[0]].rar || a[0].localeCompare(b[0]))
     .map(([id, b]) => [id, b.n, b.best]);
-  return { s: save.house, n: name, d: save.dog?.name || '', sp };
+  const deco = Object.keys(save.deco || {}).filter(k => save.deco[k] && S.DECO[k]);
+  const best = save.stats?.bestSp ? [save.stats.bestSp, save.stats.best] : null;
+  return { s: save.house, n: name, d: save.dog?.name || '', sp, deco, tr: save.trophies | 0, best };
 }

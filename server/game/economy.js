@@ -2,6 +2,7 @@
 import * as S from '../../public/js/shared.js';
 import { CFG } from './rules.js';
 import { clamp, rnd, pick, strHash } from './util.js';
+import { cleanText } from './filter.js';
 const { SP, BAIT, BAITS, RODS, UPGRADES, MOUNTS, BUFFS } = S;
 
 const TRADE_RANGE = 18,
@@ -78,10 +79,12 @@ export const economy = {
     this.dirty(P);
   },
   say(P, m) {
-    const text = String(m.text || '')
-      .replace(/[\u0000-\u001f<>]/g, '')
-      .trim()
-      .slice(0, 120);
+    const text = cleanText(
+      String(m.text || '')
+        .replace(/[\u0000-\u001f<>]/g, '')
+        .trim()
+        .slice(0, 120),
+    );
     if (!text) return;
     if (Date.now() - P.chatAt < 500) return;
     P.chatAt = Date.now();
@@ -208,6 +211,20 @@ const BUY = {
       if (!this.pay(P, Math.round((100 - dur) * (1 + s.rods.active) * 1.2 * disc))) return false;
       s.rods.dur[s.rods.active] = 100;
       this.toast(P, 'Hengel gerepareerd.', 'good');
+    },
+  },
+  deco: {
+    at: ['main'],
+    away: 'Inrichting voor je huis koop je bij de Hengelwinkel in het dorp.',
+    buy(P, id, m, disc) {
+      const s = P.save,
+        D = S.DECO[id];
+      if (!D || id in s.deco) return false;
+      if (!this.pay(P, Math.round(D.price * disc))) return false;
+      s.deco[id] = true;
+      this.toast(P, `${D.icon} ${D.name} staat nu in je huis!`, 'good');
+      this.sendHouse(P);
+      this.checkAch(P);
     },
   },
   travel: {

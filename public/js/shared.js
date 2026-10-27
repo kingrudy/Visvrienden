@@ -466,6 +466,41 @@ export const BAITS = [
   { id: 'maan', name: 'Maanaas', price: 150, icon: '🌙', desc: 'Zeldzaam aas voor verborgen vijvers en legendes.' },
 ];
 export const BAIT = Object.fromEntries(BAITS.map(b => [b.id, b]));
+
+/* ------------------------------------------------------------------ vistechnieken (volgen uit het aas) */
+// dobber: wachten tot de dobber onder gaat · grond: geen dobber, het belletje op je hengel rinkelt; zwaardere vissen
+// kunstaas: binnendraaien (ingedrukt houden) terwijl roofvissen op het bewegende aas jagen
+export const TECHS = {
+  dobber: { name: 'Dobber', icon: '🎈', desc: 'Wacht tot de dobber onder gaat en sla dan aan.' },
+  grond: { name: 'Grondvissen', icon: '⚓', desc: 'Aas op de bodem: duurt langer, maar vaak zwaardere vissen. Let op het belletje!' },
+  kunstaas: { name: 'Kunstaas', icon: '🎯', desc: 'Houd ingedrukt om binnen te draaien: roofvissen jagen op bewegend aas.' },
+};
+const TECH_OF = { boilie: 'grond', levend: 'grond', spinner: 'kunstaas', vlieg: 'kunstaas' };
+export const techOf = bait => TECH_OF[bait] || 'dobber';
+
+/* ------------------------------------------------------------------ werpen met de krachtbalk */
+export const CAST_PERIOD = 1.6; // seconden voor een hele heen-en-weer beweging van de balk
+export const CAST_PERFECT = [0.82, 0.94]; // perfecte worp: extra kans op een beet
+/** Kracht (0-1) na zoveel seconden ingedrukt houden: loopt op en weer af. */
+export const castPower = held => {
+  const t = (held / CAST_PERIOD) % 1;
+  return t < 0.5 ? t * 2 : 2 - t * 2;
+};
+
+/* ------------------------------------------------------------------ inrichting van je huis */
+export const DECOR = [
+  { id: 'kist', name: 'Schatkist', icon: '💰', price: 120, where: 'aq', desc: 'Gaat open en dicht en blaast bubbels in je aquarium.' },
+  { id: 'duiker', name: 'Duikertje', icon: '🤿', price: 150, where: 'aq', desc: 'Een kleine duiker met helm op de bodem.' },
+  { id: 'wrak', name: 'Scheepswrak', icon: '🏴‍☠️', price: 220, where: 'aq', desc: 'Een gezonken piratenschip.' },
+  { id: 'koraal', name: 'Koraal', icon: '🪸', price: 90, where: 'aq', desc: 'Felgekleurd koraal.' },
+  { id: 'bank', name: 'Bank', icon: '🛋️', price: 160, where: 'huis', desc: 'Een gezellige bank om op uit te rusten.' },
+  { id: 'lamp', name: 'Staande lamp', icon: '💡', price: 80, where: 'huis', desc: 'Warm licht in je huis.' },
+  { id: 'kast', name: 'Trofeekast', icon: '🏆', price: 260, where: 'huis', desc: 'Toont je bekers en je zwaarste vangst.' },
+  { id: 'plant', name: 'Kamerplant', icon: '🪴', price: 60, where: 'huis', desc: 'Een grote plant in een pot.' },
+  { id: 'kleed', name: 'Vloerkleed', icon: '🟥', price: 70, where: 'huis', desc: 'Een zacht rond kleed.' },
+  { id: 'haard', name: 'Open haard', icon: '🔥', price: 300, where: 'huis', desc: 'Een knapperend haardvuur.' },
+];
+export const DECO = Object.fromEntries(DECOR.map(d => [d.id, d]));
 export const BAIT_PACK = 10;
 export const RODS = [
   { id: 0, name: 'Bamboehengel', price: 0, cast: 14, line: 55, reel: 1.0, bite: 1.0, color: '#c8a458' },
@@ -548,6 +583,12 @@ export const ACHIEVEMENTS = [
   { id: 'contest', name: 'Wedstrijdvisser', desc: 'Win een wedstrijd.', test: s => s.stats.contestWins >= 1 },
   { id: 'lvl10', name: 'Ervaren', desc: 'Bereik niveau 10.', test: s => s.lvl >= 10 },
   { id: 'lvl30', name: 'Meester', desc: 'Bereik niveau 30.', test: s => s.lvl >= 30 },
+  { id: 'reus', name: 'Reuzenvangers', desc: 'Vang samen een reuzenvis.', test: s => s.stats.bossWins >= 1 },
+  { id: 'perfect', name: 'Zuivere worp', desc: 'Gooi 10 perfecte worpen.', test: s => s.stats.perfectCasts >= 10 },
+  { id: 'stek', name: 'Stekkenzoeker', desc: 'Vang 10 vissen op een visstek.', test: s => s.stats.hotCatches >= 10 },
+  { id: 'club', name: 'Clubmens', desc: 'Word lid van een visclub.', test: s => !!s.club },
+  { id: 'vrienden', name: 'Vriendenkring', desc: 'Voeg 3 vrienden toe.', test: s => (s.friends || []).length >= 3 },
+  { id: 'interieur', name: 'Binnenhuisarchitect', desc: 'Koop 3 dingen voor je huis.', test: s => Object.keys(s.deco || {}).length >= 3 },
 ];
 export const ACH = Object.fromEntries(ACHIEVEMENTS.map(a => [a.id, a]));
 export const QUEST_KINDS = {

@@ -14,7 +14,7 @@ const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'vv-test-'));
 let proc;
 before(async () => {
   proc = spawn(process.execPath, [fileURLToPath(new URL(SERVER, import.meta.url))], {
-    env: { ...process.env, PORT: String(PORT), EXTRA_PORTS: '', DATA_DIR: DATA },
+    env: { ...process.env, PORT: String(PORT), EXTRA_PORTS: '', DATA_DIR: DATA, LOGIN_LIMIT: '1000', ALLOW_CHEATS: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   proc.stderr.on('data', d => process.stderr.write(d));
@@ -157,4 +157,134 @@ test('gegevens worden bewaard in db.json', async () => {
   const db = JSON.parse(fs.readFileSync(path.join(DATA, 'db.json'), 'utf8'));
   assert.ok(db.users.tester && db.users.wessel);
   assert.ok(!JSON.stringify(db).includes('geheim123'), 'wachtwoord niet als platte tekst opgeslagen');
+});
+
+/* ---------------- samen spelen en opnieuw verbinden */
+async function client(name) {
+  let r = await post('/api/register', { username: name, password: 'geheim123' });
+  if (r.status !== 200) r = await post('/api/login', { username: name, password: 'geheim123' });
+  const build = (await (await fetch(BASE + '/api/health')).json()).build;
+  const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`),
+    got = [];
+  ws.onmessage = e => got.push(JSON.parse(e.data));
+  await new Promise(res => (ws.onopen = res));
+  const c = {
+    ws,
+    got,
+    send: o => ws.send(JSON.stringify(o)),
+    wait: (t, pred = () => true, ms = 5000) =>
+      new Promise((res, rej) => {
+        const st = Date.now(),
+          from = c.mark;
+        const iv = setInterval(() => {
+          const m = got.slice(from).find(x => x.t === t && pred(x));
+          if (m) {
+            clearInterval(iv);
+            res(m);
+          } else if (Date.now() - st > ms) {
+            clearInterval(iv);
+            rej(new Error(name + ': geen ' + t));
+          }
+        }, 20);
+      }),
+    mark: 0,
+    next() {
+      c.mark = got.length;
+      return c;
+    },
+  };
+  c.send({ t: 'auth', token: r.body.token, build });
+  await c.wait('authed');
+  return c;
+}
+
+test('vrienden: toevoegen, online-status en kamer', async () => {
+  const a = await client('Femke'),
+    b = await client('Gijs');
+  a.next().send({ t: 'friendAdd', name: 'gijs' });
+  let s = await a.wait('social');
+  assert.equal(s.friends[0].name, 'Gijs');
+  assert.equal(s.friends[0].online, true);
+  await b.wait('toast', m => /vriend/.test(m.msg));
+  b.next().send({ t: 'quick' });
+  const joined = await b.wait('joined');
+  a.next().send({ t: 'social' });
+  s = await a.wait('social');
+  assert.equal(s.friends[0].room.id, joined.room.id, 'je ziet in welke kamer je vriend is');
+  a.next().send({ t: 'friendAdd', name: 'bestaatniet' });
+  await a.wait('toast', m => /bestaat niet/.test(m.msg));
+  a.ws.close();
+  b.ws.close();
+});
+
+test('visclub: oprichten kost munten, lid worden, afkorting bij je naam', async () => {
+  const a = await client('Hanna'),
+    b = await client('Ivo');
+  a.next().send({ t: 'clubCreate', name: 'De Snoekjes', tag: 'snk' });
+  await a.wait('toast', m => /kost 200/.test(m.msg)); // te weinig munten
+  a.next().send({ t: 'quick' });
+  await a.wait('joined');
+  a.send({ t: 'dev', coins: 500 });
+  a.next().send({ t: 'clubCreate', name: 'De Snoekjes', tag: 'snk' });
+  let s = await a.wait('social', m => !!m.club);
+  assert.equal(s.club.tag, 'SNK');
+  assert.equal(s.club.owner, 'Hanna');
+  const save = await a.wait('save', m => m.save.club);
+  assert.equal(save.save.coins, 80 + 500 - 200);
+  b.next().send({ t: 'clubJoin', key: s.club.key });
+  s = await b.wait('social');
+  assert.equal(s.club.members.length, 2);
+  b.next().send({ t: 'quick' });
+  const j = await b.wait('joined');
+  assert.equal(j.players.find(p => p.name === 'Ivo').club, 'SNK');
+  a.next().send({ t: 'clubCreate', name: 'Kankerclub', tag: 'KK' });
+  await a.wait('toast');
+  a.ws.close();
+  b.ws.close();
+});
+
+test('dagdoel staat klaar voor iedereen', async () => {
+  const a = await client('Jet');
+  const authed = a.got.find(m => m.t === 'authed');
+  assert.ok(authed.community && authed.community.n > 0 && typeof authed.community.text === 'string');
+  a.ws.close();
+});
+
+test('uitnodigen: vriend krijgt een uitnodiging met de kamer', async () => {
+  const a = await client('Koen'),
+    b = await client('Lies');
+  a.next().send({ t: 'quick' });
+  const j = await a.wait('joined');
+  b.next();
+  a.next().send({ t: 'invite', to: 'Lies', kind: 'house' });
+  const inv = await b.wait('invite');
+  assert.equal(inv.from, 'Koen');
+  assert.equal(inv.kind, 'house');
+  assert.equal(inv.room.id, j.room.id);
+  a.ws.close();
+  b.ws.close();
+});
+
+test('opnieuw verbinden: terug in dezelfde kamer', async () => {
+  const a = await client('Mila');
+  a.next().send({ t: 'quick' });
+  const j = await a.wait('joined');
+  a.ws.close();
+  await new Promise(r => setTimeout(r, 300));
+  const b = await client('Mila');
+  const authed = b.got.find(m => m.t === 'authed');
+  assert.equal(authed.resume, j.room.id);
+  b.next().send({ t: 'join', id: authed.resume, resume: true });
+  const j2 = await b.wait('joined');
+  assert.equal(j2.room.id, j.room.id);
+  assert.ok(j2.you, 'startplek meegestuurd');
+  b.ws.close();
+});
+
+test('uitnodigingslink naar een verdwenen kamer: gewoon snel spelen', async () => {
+  const a = await client('Noor');
+  a.next().send({ t: 'join', id: 99999, link: true });
+  const j = await a.wait('joined');
+  assert.ok(j.room.id > 0);
+  a.ws.close();
 });

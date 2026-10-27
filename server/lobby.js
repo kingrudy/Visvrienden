@@ -1,14 +1,17 @@
-// Lobby: verbonden spelers, kamers aanmaken/opruimen, berichten buiten een kamer en de spellus.
+// Lobby: verbonden spelers, kamers aanmaken/opruimen, berichten buiten een kamer, samen-spelen en de spellus.
 import { BUILD, MAX_ROOMS, ROOM_IDLE_MS, PERMANENT_ROOMS, TICK_MS } from './config.js';
 import { markDirty } from './db.js';
 import { userByToken, prepareUser, allHouses } from './accounts.js';
 import { Room } from './game/room.js';
-import { applyTalent, resetTalents, ensureDaily } from './game/progress.js';
+import { applyTalent, resetTalents, ensureDaily, levelInfo } from './game/progress.js';
+import { cleanText } from './game/filter.js';
+import * as social from './social.js';
 
 const MSG_PER_SECOND = 400,
   PING_EVERY_MS = 20000,
   PONG_TIMEOUT_MS = 60000,
-  LOBBY_BROADCAST_S = 2;
+  LOBBY_BROADCAST_S = 2,
+  RESUME_MS = 120000; // na een verbroken verbinding mag je zo lang terug naar je kamer en plek
 
 const clients = new Set();
 const byUser = new Map(); // naam (kleine letters) -> Client
@@ -38,6 +41,10 @@ class Client {
   }
   onClose() {
     clients.delete(this);
+    // verbinding weggevallen midden in het spel: onthoud kamer en plek, zodat je na herverbinden verder kunt
+    if (this.room && this.player && this.user) {
+      this.user.resume = { room: this.room.id, x: this.player.x, z: this.player.z, at: Date.now() };
+    }
     this.leaveRoom();
     if (this.user && byUser.get(this.user.name.toLowerCase()) === this) byUser.delete(this.user.name.toLowerCase());
   }
@@ -53,6 +60,7 @@ class Client {
     if (m.t === 'auth') return this.auth(m);
     if (!this.user) return;
     if (this.outdated) return this.send({ t: 'err', msg: 'Herlaad de pagina om de nieuwe versie te laden.' });
+    if (SOCIAL_MESSAGES[m.t]) return SOCIAL_MESSAGES[m.t](this, m); // werkt zowel in de lobby als in een kamer
     if (this.room) {
       if (m.t === 'leave') return this.leaveRoom(true);
       if (this.player) this.room.handle(this.player, m);
@@ -67,9 +75,10 @@ class Client {
     const key = u.name.toLowerCase(),
       old = byUser.get(key);
     if (old && old !== this) {
+      // elders ingelogd: oude verbinding eruit
       old.send({ t: 'kicked' });
       old.kill();
-    } // elders ingelogd: oude verbinding eruit
+    }
     this.user = prepareUser(u);
     byUser.set(key, this);
     if (m.build !== BUILD) {
@@ -82,12 +91,18 @@ class Client {
         msg: 'Er is een nieuwe versie van Visvrienden. Herlaad de pagina (F5, of op je telefoon omlaag trekken) om verder te spelen.',
       });
     }
-    this.send({ t: 'authed', name: u.name, save: u.save, rooms: roomList() });
+    const r = u.resume,
+      resume = r && Date.now() - r.at < RESUME_MS && rooms.has(r.room) ? r.room : 0;
+    this.send({ t: 'authed', name: u.name, save: u.save, rooms: roomList(), resume, community: social.communityInfo(u) });
   }
-  joinRoom(room) {
+  joinRoom(room, opts = {}) {
     if (room.players.size >= room.max) return this.send({ t: 'err', msg: 'Deze kamer is vol.' });
+    const r = this.user.resume;
+    if (opts.resume && r && r.room === room.id && Date.now() - r.at < RESUME_MS) opts = { x: r.x, z: r.z };
+    else opts = {};
+    this.user.resume = null;
     this.room = room;
-    this.player = room.addPlayer(this);
+    this.player = room.addPlayer(this, opts);
   }
   leaveRoom(notify = false) {
     if (!this.room) return;
@@ -101,21 +116,23 @@ class Client {
       this.send({ t: 'left', save: this.user.save, rooms: roomList() });
     }
   }
+  /** Save is buiten de spellus veranderd: in een kamer via de Room versturen, anders direct. */
+  saveChanged() {
+    markDirty();
+    if (this.player) this.player.dirty = true;
+    else this.send({ t: 'save', save: this.user.save });
+  }
 }
 
-const saveReply = c => {
-  markDirty();
-  c.send({ t: 'save', save: c.user.save });
-};
 const LOBBY_MESSAGES = {
   rooms: c => c.send({ t: 'rooms', rooms: roomList() }),
   talent: (c, m) => {
     applyTalent(c.user.save, String(m.id));
-    saveReply(c);
+    c.saveChanged();
   },
   retalent: c => {
     resetTalents(c.user.save);
-    saveReply(c);
+    c.saveChanged();
   },
   look: (c, m) => {
     const l = m.v | 0;
@@ -128,15 +145,19 @@ const LOBBY_MESSAGES = {
   create: (c, m) => {
     if (rooms.size >= MAX_ROOMS) return c.send({ t: 'err', msg: 'Er zijn al te veel kamers. Kies een bestaande.' });
     const name =
-      String(m.name || '')
-        .replace(/[^\p{L}\p{N} _'-]/gu, '')
-        .trim()
-        .slice(0, 24) || c.user.name + 's vijver';
-    c.joinRoom(makeRoom(name, Math.min(8, Math.max(1, m.max | 0 || 4)), false));
+      cleanText(
+        String(m.name || '')
+          .replace(/[^\p{L}\p{N} _'-]/gu, '')
+          .trim()
+          .slice(0, 24),
+      ).replace(/\*+/g, '') || c.user.name + 's vijver';
+    c.joinRoom(makeRoom(name.trim() || c.user.name + 's vijver', Math.min(8, Math.max(1, m.max | 0 || 4)), false));
   },
   join: (c, m) => {
     const r = rooms.get(m.id | 0);
-    if (r) c.joinRoom(r);
+    if (r) c.joinRoom(r, { resume: !!m.resume });
+    else if (m.link)
+      LOBBY_MESSAGES.quick(c); // uitnodigingslink naar een kamer die niet meer bestaat
     else c.send({ t: 'err', msg: 'Die kamer bestaat niet meer.' });
   },
   quick: c => {
@@ -145,9 +166,93 @@ const LOBBY_MESSAGES = {
   },
 };
 
+/* ---------------- vrienden, clubs, dagdoel en uitnodigingen (in de lobby én in een kamer) */
+const reply = (c, err) => {
+  if (err) c.send({ t: 'toast', msg: err, kind: 'warn' });
+};
+const sendSocial = c =>
+  c.send({
+    t: 'social',
+    friends: social.friendsStatus(c.user),
+    club: social.clubInfo(c.user),
+    clubs: social.clubList(),
+    community: social.communityInfo(c.user),
+  });
+const SOCIAL_MESSAGES = {
+  social: c => sendSocial(c),
+  friendAdd: (c, m) => {
+    reply(c, social.addFriend(c.user, String(m.name || '')));
+    sendSocial(c);
+  },
+  friendDel: (c, m) => {
+    social.removeFriend(c.user, String(m.name || ''));
+    sendSocial(c);
+  },
+  clubCreate: (c, m) => {
+    const err = social.createClub(c.user, m.name, m.tag);
+    reply(c, err);
+    if (!err) c.send({ t: 'toast', msg: `Club opgericht! Nodig je vrienden uit om lid te worden.`, kind: 'good' });
+    afterClubChange(c);
+  },
+  clubJoin: (c, m) => {
+    reply(c, social.joinClub(c.user, String(m.key || '')));
+    afterClubChange(c);
+  },
+  clubLeave: c => {
+    social.leaveClub(c.user);
+    afterClubChange(c);
+  },
+  invite: (c, m) => {
+    const kind = m.kind === 'house' ? 'house' : 'room';
+    if (!c.room) return reply(c, 'Ga eerst een kamer in om iemand uit te nodigen.');
+    const names =
+      m.to === '*'
+        ? social
+            .friendsStatus(c.user)
+            .filter(f => f.online)
+            .map(f => f.name)
+        : [String(m.to || '')];
+    let sent = 0;
+    for (const n of names) if (!social.invite(c.user, n, c.room, kind)) sent++;
+    // spelers in dezelfde kamer krijgen bij een huisuitnodiging ook een bericht
+    if (kind === 'house' && m.to === '*')
+      for (const P of c.room.players.values())
+        if (P !== c.player && !names.includes(P.name) && !social.invite(c.user, P.name, c.room, kind)) sent++;
+    c.send({
+      t: 'toast',
+      msg: sent ? `Uitnodiging verstuurd (${sent}).` : 'Er is niemand online om uit te nodigen.',
+      kind: sent ? 'good' : 'warn',
+    });
+  },
+};
+function afterClubChange(c) {
+  if (c.room && c.player) c.room.sendPinfo(c.player);
+  sendSocial(c);
+}
+
+/** Beloning (dagdoel) geven aan een speler, ook als die offline is. */
+function rewardUser(u, r) {
+  const c = byUser.get(u.name.toLowerCase());
+  u.save.coins += r.coins;
+  if (c?.room && c.player) {
+    c.room.addXp(c.player, r.xp);
+    c.room.toast(c.player, `🌍 Dagdoel gehaald! +${r.coins} munten en ${r.xp} xp`, 'good');
+  } else {
+    u.save.xp += r.xp;
+    u.save.lvl = levelInfo(u.save.xp).level;
+  }
+}
+
 /* ---------------- kamers */
+const roomServices = {
+  markDirty,
+  houses: allHouses,
+  clubTag: social.clubTag,
+  onCatch: (u, sp, w) => social.onCatch(u, sp, w, rewardUser),
+  onRelease: u => social.onRelease(u, rewardUser),
+};
 function makeRoom(name, max, permanent) {
-  const r = new Room(nextRoomId++, name, max, permanent, { markDirty, houses: allHouses });
+  const r = new Room(nextRoomId++, name, max, permanent, roomServices);
   rooms.set(r.id, r);
   broadcastRooms();
   return r;
@@ -160,6 +265,13 @@ function broadcastRooms() {
 
 /* ---------------- start */
 export function startLobby() {
+  social.initSocial({
+    client: name => byUser.get(String(name).toLowerCase()),
+    broadcast: msg => {
+      const s = JSON.stringify(msg);
+      for (const c of clients) if (c.user && !c.outdated) c.send(s);
+    },
+  });
   for (const [name, max] of PERMANENT_ROOMS) makeRoom(name, max, true);
 
   // spellus: alle kamers met spelers bijwerken; lege kamers opruimen

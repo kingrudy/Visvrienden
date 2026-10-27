@@ -1,7 +1,7 @@
 // Autoritatieve spelsimulatie voor één kamer. De methodes staan per onderwerp in aparte bestanden:
 //   fishing.js  vissen in de vijvers, werpen, aanbeet, drillen, vangst en beloningen
 //   economy.js  winkel, verkopen, bakken, chat en ruilen
-//   events.js   weer, reizende verkoper, reigers en wedstrijden
+//   events.js   weer, reizende verkoper, reigers, wedstrijden en de reuzenvis
 import * as S from '../../public/js/shared.js';
 import { CFG } from './rules.js';
 import { r1, r2, rnd, isWeekend } from './util.js';
@@ -9,6 +9,7 @@ import { ensureSave, houseInfo, applyTalent, resetTalents, levelInfo } from './p
 import { fishing } from './fishing.js';
 import { economy } from './economy.js';
 import { events } from './events.js';
+import { boss } from './boss.js';
 const { PONDS, BAIT, BAITS, RODS, UPGRADES, ACHIEVEMENTS, QUEST_KINDS } = S;
 
 const MOUNT_CODE = { walk: 0, bike: 1, scooter: 2, boat: 3 };
@@ -17,8 +18,9 @@ const EMOTES = ['wave', 'laugh', 'thumb', 'fish'];
 
 export class Room {
   /**
-   * @param {{ markDirty?: () => void, houses?: () => any[], cheats?: boolean }} services
+   * @param {object} services (allemaal optioneel)
    *   markDirty: opslaan aanvragen · houses: alle huizen (voor nieuwe spelers) · cheats: dev-commando's toestaan
+   *   clubTag(user): clubafkorting · onCatch(user, soort, kg) en onRelease(user): tellen mee voor club en dagdoel
    */
   constructor(id, name, max, permanent, services = {}) {
     this.id = id;
@@ -28,6 +30,9 @@ export class Room {
     this.markDirty = services.markDirty || (() => {});
     this.houses = services.houses || (() => []);
     this.cheats = services.cheats ?? process.env.ALLOW_CHEATS === '1';
+    this.clubTag = services.clubTag || (() => '');
+    this.onCatch = services.onCatch || (() => {});
+    this.onRelease = services.onRelease || (() => {});
     this.players = new Map();
     this.nextPid = 1;
     this.reset();
@@ -38,6 +43,7 @@ export class Room {
     this.emptySince = Date.now();
     this.resetFish();
     this.resetEvents();
+    this.resetBoss();
     this.offers = new Map();
     this.nextOffer = 1;
   }
@@ -58,12 +64,14 @@ export class Room {
   }
 
   /* ---------------- spelers */
-  addPlayer(conn) {
+  /** @param {{ x?: number, z?: number }} opts startplek (bijv. na opnieuw verbinden) */
+  addPlayer(conn, opts = {}) {
     const u = conn.user,
       save = ensureSave(u),
       now = Date.now();
-    const x = S.SPAWN.x + rnd(-2, 2),
-      z = S.SPAWN.z + rnd(-2, 2);
+    const back = Number.isFinite(opts.x) && Number.isFinite(opts.z) && S.walkable(opts.x, opts.z);
+    const x = back ? opts.x : S.SPAWN.x + rnd(-2, 2),
+      z = back ? opts.z : S.SPAWN.z + rnd(-2, 2);
     const P = {
       id: this.nextPid++,
       conn,
@@ -111,9 +119,11 @@ export class Room {
       weekend: isWeekend(),
       featured: S.featuredSpecies().id,
       houses: this.houses(),
+      you: { x: r1(x), z: r1(z) },
+      boss: this.bossInfo(),
     });
     this.broadcast({ t: 'pinfo', p: this.pinfo(P) }, P);
-    this.feed(`${P.name} is komen vissen.`, 'info', P);
+    this.feed(back ? `${P.name} is terug.` : `${P.name} is komen vissen.`, 'info', P);
     return P;
   }
   removePlayer(P) {
@@ -132,6 +142,7 @@ export class Room {
       dog: P.save.dog?.name || null,
       lvl: P.save.lvl,
       mount: P.mount,
+      club: this.clubTag(P.user),
     };
   }
   sendPinfo(P) {
@@ -287,6 +298,10 @@ export class Room {
         resetTalents(P.save);
         this.dirty(P);
         return;
+      case 'visit':
+        return this.visit(P, String(m.name || ''));
+      case 'deco':
+        return this.setDeco(P, String(m.id), !!m.on);
       case 'dev':
         return this.dev(P, m);
     }
@@ -302,6 +317,21 @@ export class Room {
     if (!h) return this.toast(P, 'Je hebt nog geen huis.', 'warn');
     if (P.fs || P.mount !== 'walk') return this.toast(P, 'Haal eerst je lijn binnen en stap af.', 'warn');
     this.tp(P, h.x, h.z - S.HOUSE_D / 2 - 2.2, 'Je staat voor je huis.');
+  }
+  /** Naar het huis van een andere speler (bijv. na een uitnodiging). */
+  visit(P, name) {
+    const h = this.houses().find(x => x.n.toLowerCase() === name.toLowerCase()),
+      slot = h && S.HOUSE_SLOTS[h.s];
+    if (!slot) return this.toast(P, 'Dat huis bestaat niet.', 'warn');
+    if (P.fs || P.mount !== 'walk') return this.toast(P, 'Haal eerst je lijn binnen en stap af.', 'warn');
+    this.tp(P, slot.x, slot.z - S.HOUSE_D / 2 - 2.2, `Je staat voor het huis van ${h.n}.`);
+  }
+  /** Inrichting neerzetten of opbergen. */
+  setDeco(P, id, on) {
+    if (!(id in P.save.deco)) return;
+    P.save.deco[id] = on;
+    this.dirty(P);
+    this.sendHouse(P);
   }
   /** Alleen voor testen: start de server met ALLOW_CHEATS=1. */
   dev(P, m) {
@@ -345,6 +375,9 @@ export class Room {
       this.contestCdUntil = 0;
       this.startContest(P);
     }
+    if (m.boss) this.spawnBoss(m.boss === true ? null : m.boss | 0);
+    if (m.deco) for (const d of S.DECOR) s.deco[d.id] = true;
+    if (m.deco) this.sendHouse(P);
     this.dirty(P);
   }
 
@@ -434,6 +467,7 @@ export class Room {
     this.t += dt;
     this.tick++;
     this.updateEvents(dt);
+    this.updateBoss(dt);
     this.updateFish(dt);
     this.maintainFish(dt);
     for (const P of this.players.values()) {
@@ -477,4 +511,4 @@ export class Room {
       }
   }
 }
-Object.assign(Room.prototype, fishing, economy, events);
+Object.assign(Room.prototype, fishing, economy, events, boss);
